@@ -38,7 +38,8 @@ Przy błędzie: `ok: false`, w `meta` np. `reason`: `no_corners`, `pnp_failed_al
 `analyze_panel_image(image_bgr, yolo_det, k, dist, xy_mode=..., angle_source=..., json_report_angle_deg=..., angle_calibration_path=...)`
 
 - Obraz BGR, detekcje YOLO (ta sama lista co w `pipeline_competition.load_yolo`), kalibracja kamery.
-- `xy_mode`: `grid_geom` lub `grid_geom_white` (korekta białego narożnika na zunifikowanym prostokącie).
+- `xy_mode`: `grid_geom`, `grid_geom_white`, `warp_grid`, `geom_grid`, lub **`line_grid`** (v3: kandydaci `img_panel` / `black_panel` / warp-refine; wybór backendu XY: homografia z 4 rogów, linie na warp, lub RANSAC siatki — heurystyka bez GT).
+- `camera_calib_path`: opcjonalny NPZ z `pipelines.calibrate_camera` (`cv2.undistort` przed geometrią).
 - `angle_source`: skąd bierze się kąt raportu — m.in. `json` (z etykiety), `rmat_linear` / `rmat_theta` (z oszacowanej rotacji + opcjonalna kalibracja), `geom`, `pnp`.
 
 **Wyjście:** `PanelAnalyzeResult`:
@@ -82,6 +83,11 @@ python3 -m pipelines.full_run --image dataset/images/img_0.png --angle-calibrati
 |--------|---------|------|
 | Konkurs starych pipeline’ów | `python3 pipeline_competition.py --dataset ./dataset` | Benchmark wielu wariantów z `pipeline_competition`; wyniki w `reports/` (JSON/CSV/JSONL). |
 | Ewaluacja modułu B | `python3 -m pipelines.eval_module_b --dataset dataset` | Metryki kart / kolor / XY / kąt względem `labels_raport`. |
+| Ewaluacja frontal + reliable v2 | `python3 -m pipelines.eval_module_b --dataset dataset --orbit-steps frontal --reliable-only --out dataset/results/eval_frontal.json` | Orbit step 0, reproj≤8, homografia RANSAC≥12 inlierów. |
+| Porównanie trybów XY | `python3 -m pipelines.eval_module_b --orbit-steps frontal --reliable-only --compare-modes grid_geom_white,line_grid --out dataset/results/eval_frontal_line_grid_v3.json` | Na reliable v2: `line_grid` ~93% CXY vs `grid_geom_white` ~82% (frontal). |
+| Wizualizacja `line_grid` | `python3 -m pipelines.visualize_module_b --xy-mode line_grid --orbit-steps frontal --reliable-only --out-dir dataset/debug_line_grid_v3` | Galeria z `corner_source` i `xy_backend_selected`. |
+| **Live moduł B** | `python3 -m release.run_live_panel --preview --camera 1 --rotate 180 --xy-mode line_grid` | Kamera + kolorowe kartki na siatce; baseline v3 — patrz `BASELINE.md`. |
+| Kalibracja kamery | `python3 -m pipelines.calibrate_camera --images 'calibration_chess/*.jpg'` | Zapis `config/camera_calibration.npz` do undistort. |
 | Widoki przednie vs reszta | `python3 -m pipelines.eval_frontal_views --dataset dataset` | Metryki A (pose) i B (panel); opcja `--compare-non-frontal`. |
 | Błąd rotacji vs GT | `python3 -m pipelines.eval_pose_angular --dataset dataset` | Porównanie `model_to_camera_opencv` z estymatą. |
 | Kalibracja kąta raportu | `python3 -m pipelines.calibrate_report_angle --dataset dataset` | Zapis wagi do `module_panel/data/angle_linear_rmat.json` (ścieżka `--out`). |
@@ -99,6 +105,95 @@ blender --background --python generate_dataset_blender.py
 Szybki test (mniej scen, jeśli zaimplementowane w skrypcie): np. `DRONIADA_QUICK_TEST=1` (patrz stałe w pliku).
 
 Wygenerowane pliki trafiają do `dataset/` (obrazy + `labels_yolo`, `labels_raport`, `labels_pose`).
+
+## Release (pętla główna)
+
+Osobne skrypty do integracji z lotem — prealokacja w `PoseRuntime` / `PanelRuntime`, pętla po klatkach z `dataset/images`:
+
+```bash
+python3 -m release.run_pose --dataset dataset
+python3 -m release.run_panel --dataset dataset --angle-source rmat_linear
+```
+
+`--max-frames N`, `--out plik.jsonl`. Kod eksperymentów: `pipelines/`, ewaluacje, `pipeline_competition.py`.
+
+### Test na żywo (kamera Mac)
+
+**Zamknij QuickTime** — Python musi sam otworzyć kamerę (`VideoCapture`). QuickTime i skrypt nie mogą dzielić tej samej kamery.
+
+```bash
+python3 -m release.run_live --mode both --interval-ms 500 --preview
+```
+
+Logi w terminalu; opcjonalnie `--log-file live.log`. `q` w oknie podglądu lub Ctrl+C. Bez live YOLO karty na panelu będą puste (kąt/pozycja z narożników obrazu).
+
+Nagranie z pliku (obrót tylko w skrypcie, oryginał `.mov` bez zmian):
+
+```bash
+python3 -m release.run_video --video Droniada_nag1.mov --rotate 180 --mode both --preview --interval-ms 500
+```
+
+Narożniki: **`detect_corners_panel`** — najpierw czarna siatka (HSV/LAB), dopiero gdy to nie zadziała, ukryty zapas Canny (bez osobnych `canny_*` w logach).
+
+Podgląd narożników (ta sama detekcja co `run_live`):
+
+```bash
+python3 -m release.run_corner_tune --rotate 180 --preview --interval-ms 800
+```
+
+Na żywo z modułami:
+
+```bash
+python3 -m release.run_live --camera 1 --mode both --preview --interval-ms 1000
+```
+
+Domyślnie `--rotate 180` (Continuity). Podgląd: zielony = OK, żółty = słabe, czerwony „brak panelu”.
+
+Gotowy alignment live (rekomendowany stan na testy):
+
+```bash
+python3 -m release.run_alignment --camera 1 --preview --interval-ms 300
+```
+
+Domyślny pipeline to `hybrid`: bazuje głównie na kolorze panelu (`hsv`), traktuje siatkę jako walidację i przełącza się z profilu osiowego na kontur HSV, gdy panel jest widziany pod kątem. Domyślnie włączona jest stabilizacja czasowa (EMA + krótki hold po zgubieniu panelu). Dla sterowania można dodać kompaktowy output:
+
+```bash
+python3 -m release.run_alignment --camera 1 --preview --control-output --interval-ms 300
+```
+
+Porównanie bez stabilizacji:
+
+```bash
+python3 -m release.run_alignment --camera 1 --preview --no-stabilize --interval-ms 300
+```
+
+Zapis debug-klatek z overlayem:
+
+```bash
+python3 -m release.run_alignment --camera 1 --preview --save-dir reports/alignment_debug --save-every 15
+```
+
+Do porównań można odpalić wszystkie metody:
+
+```bash
+python3 -m release.run_alignment --camera 1 --pipeline all --preview --interval-ms 300
+```
+
+Metody do testów: `hybrid` i `hsv` są główne; `scored` jest zapasem; `grid` i `dark` są diagnostyczne.
+
+```bash
+python3 -m release.run_alignment --camera 1 --pipeline hsv --preview
+python3 -m release.run_alignment --camera 1 --pipeline hybrid --preview
+python3 -m release.run_alignment --video Droniada_nag1.mov --pipeline all --preview --no-loop
+```
+
+Strojenie wielu metod (offline): `run_corner_tune --probes full`.
+
+Benchmark metod na dataset (błąd kąta vs GT, 200 zdjęć):
+
+```bash
+python3 -m pipelines.eval_corner_methods --max-images 200 --out reports/corner_methods_benchmark.json
+```
 
 ## Import w kodzie
 
