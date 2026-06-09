@@ -60,7 +60,7 @@ def main():
     ap.add_argument('--competition', action='store_true')
     ap.add_argument('--panel-id', default='A')
     ap.add_argument('--angle-source', default=None, choices=['json', 'rmat_linear', 'rmat_theta', 'geom', 'pnp'])
-    ap.add_argument('--xy-mode', default='grid_geom_white', choices=['grid_geom', 'grid_geom_white'])
+    ap.add_argument('--xy-mode', default='grid_geom_white', choices=['grid_geom', 'grid_geom_white', 'warp_grid'])
     ap.add_argument('--angle-calibration', default=None)
     args = ap.parse_args()
     stem = os.path.splitext(os.path.basename(args.image))[0]

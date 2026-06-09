@@ -1,0 +1,33 @@
+{
+  "schema": "droniada_panel_color_layout_v1",
+  "name": "Przykład — nagranie kalibracyjne panelu",
+  "video": "dataset/my_capture/panel_calib.mov",
+  "rotate_deg": 180,
+  "cells": [
+    {
+      "color": "ZOLTA",
+      "row": 1,
+      "col": 2,
+      "label": "1,2"
+    },
+    {
+      "color": "CZERWONA",
+      "row": 9,
+      "col": 3,
+      "label": "3,9"
+    },
+    {
+      "color": "NIEBIESKA",
+      "row": 8,
+      "col": 6,
+      "label": "6,8"
+    },
+    {
+      "color": "ZIELONA",
+      "row": 9,
+      "col": 1,
+      "label": "9,1"
+    }
+  ],
+  "notes": "row/col = siatka konkursowa (wiersz 1 = dół panelu). label = opis dla raportu. Skopiuj jako config/panel_color_layout.json i uzupełnij pozycje z nagrania."
+}

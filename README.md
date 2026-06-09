@@ -86,7 +86,11 @@ python3 -m pipelines.full_run --image dataset/images/img_0.png --angle-calibrati
 | Ewaluacja frontal + reliable v2 | `python3 -m pipelines.eval_module_b --dataset dataset --orbit-steps frontal --reliable-only --out dataset/results/eval_frontal.json` | Orbit step 0, reproj≤8, homografia RANSAC≥12 inlierów. |
 | Porównanie trybów XY | `python3 -m pipelines.eval_module_b --orbit-steps frontal --reliable-only --compare-modes grid_geom_white,line_grid --out dataset/results/eval_frontal_line_grid_v3.json` | Na reliable v2: `line_grid` ~93% CXY vs `grid_geom_white` ~82% (frontal). |
 | Wizualizacja `line_grid` | `python3 -m pipelines.visualize_module_b --xy-mode line_grid --orbit-steps frontal --reliable-only --out-dir dataset/debug_line_grid_v3` | Galeria z `corner_source` i `xy_backend_selected`. |
-| **Live moduł B** | `python3 -m release.run_live_panel --preview --camera 1 --rotate 180 --xy-mode line_grid` | Kamera + kolorowe kartki na siatce; baseline v3 — patrz `BASELINE.md`. |
+| **Live A + B (stanowisko)** | `./scripts/run_live_dashboard.sh` | Jeden panel: A+B, sidebar, migawki przy niskim reproj. Instrukcja: [`docs/LIVE_BENCH.md`](docs/LIVE_BENCH.md). |
+| **Live A + B (skrót)** | `./scripts/run_live_bench.sh` | To samo co dashboard (`--bench` = `--dashboard`). |
+| **Live moduł A (pose)** | `python3 -m release.run_live --mode pose --preview` | Dict integracyjny: odległość + kąty + ustawienie panelu. Zob. [`docs/MODULE_A.md`](docs/MODULE_A.md), `./scripts/verify_module_a_blender.sh`. |
+| **Live moduł B** | `python3 -m release.run_live_panel --video … --corner-mode yolo_pose --cxy-latch` | Migawka: [`docs/MODULE_B_SNAPSHOT.md`](docs/MODULE_B_SNAPSHOT.md). Weryfikacja: `./scripts/verify_module_b_snapshot.sh`. Zob. też `BASELINE.md`. |
+| **Czyszczenie artefaktów** | `./scripts/cleanup_artifacts.sh` | Usuwa `live_debug/`, stare galerie `debug_*`, nagrania testowe (~GB). Nie rusza obrazów treningowych ani wag YOLO. |
 | Kalibracja kamery | `python3 -m pipelines.calibrate_camera --images 'calibration_chess/*.jpg'` | Zapis `config/camera_calibration.npz` do undistort. |
 | Widoki przednie vs reszta | `python3 -m pipelines.eval_frontal_views --dataset dataset` | Metryki A (pose) i B (panel); opcja `--compare-non-frontal`. |
 | Błąd rotacji vs GT | `python3 -m pipelines.eval_pose_angular --dataset dataset` | Porównanie `model_to_camera_opencv` z estymatą. |
@@ -94,17 +98,54 @@ python3 -m pipelines.full_run --image dataset/images/img_0.png --angle-calibrati
 
 ## Generowanie datasetu (Blender)
 
-Skrypt `generate_dataset_blender.py` jest pisany pod interpreter Blendera. Na początku pliku jest **`BASE_DIR`** — ustaw na ścieżkę do tego repozytorium na swojej maszynie (lub użyj zmiennych środowiskowych tam, gdzie są czytane, np. `DRONIADA_DATASET_SUBDIR`).
+Skrypt `generate_dataset_blender.py` jest pisany pod interpreter Blendera.
 
-Przykład:
+**Domyślnie tylko ujęcia z przodu / lekko skośne** (bez tyłu panelu i bez czystego boku jak cienka kreska): azymuty  
+`-22,…,22`° (7 klatek / scena, jeśli przejdą filtry). Odrzucane są kadry z tyłu (biały znacznik za kamerą), zbyt cienki rzut panelu (&lt; 200 px) lub zbyt mały w kadrze. **Bez fallback** — zła klatka nie jest renderowana.
+
+Przykład — **pełna regeneracja** (usuwa stare `img_*`):
 
 ```bash
-blender --background --python generate_dataset_blender.py
+# macOS (Blender często nie jest w PATH):
+/Applications/Blender.app/Contents/MacOS/Blender --background --python generate_dataset_blender.py
+
+# albo skrypt (sam znajdzie Blender.app):
+DRONIADA_FRESH=1 ./scripts/regenerate_blender_frontal.sh
 ```
 
-Szybki test (mniej scen, jeśli zaimplementowane w skrypcie): np. `DRONIADA_QUICK_TEST=1` (patrz stałe w pliku).
+Szybki test: `DRONIADA_QUICK_TEST=1` (5 scen, 3 azymuty: `0,30,-30`).
 
-Wygenerowane pliki trafiają do `dataset/` (obrazy + `labels_yolo`, `labels_raport`, `labels_pose`).
+Zmienne (opcjonalnie):
+
+| Zmienna | Domyślnie | Znaczenie |
+|---------|-----------|-----------|
+| `DRONIADA_ORBIT_AZIMUTHS` | `-30,…,30` (9 wartości) | Lista kątów; `full` = stary orbit 360° |
+| `DRONIADA_MIN_FRONT_DOT` | `0.72` | Min. cos(kąta) do normalnej frontu (odrzuca tył/bok) |
+| `DRONIADA_MIN_PANEL_SPAN_PX` | `200` | Min. krótszy bok rzutu panelu w px |
+| `DRONIADA_MIN_PANEL_AREA_FRAC` | `0.06` | Min. ułamek pola kadru zajęty przez panel |
+| `DRONIADA_FRESH` | — | `1` = wyczyść `images/` i `labels_*` przed generacją |
+| `DRONIADA_PANEL_THICKNESS_M` | `0` | `0` = cienka płaszczyzna (bez jasnego boku); np. `0.002` = 2 mm |
+
+Eksport GT rogów → YOLO-Pose (projekcja z `labels_pose`):
+
+```bash
+python3 -m release.export_blender_yolo_pose --dataset dataset --out dataset/droniada_pose_blender
+```
+
+**Trening YOLO-Pose (Sim2Real, YOLO11n domyślnie):**
+
+```bash
+./scripts/train_yolo_two_stage.sh 0    # eksport Blender + panel_labels
+./scripts/train_yolo_two_stage.sh 1    # pretrain Blender → runs/pose/droniada_blender_pretrain/
+./scripts/train_yolo_two_stage.sh 2    # fine-tune real → runs/pose/droniada_real_finetune/
+# lub: ./scripts/train_yolo_two_stage.sh all
+
+export DRONIADA_YOLO_POSE_WEIGHTS="$(pwd)/runs/pose/droniada_real_finetune/weights/best.pt"
+```
+
+Na Jetsonie: `YOLO_MODEL=yolov8n-pose.pt ./scripts/train_yolo_two_stage.sh all`
+
+Wygenerowane pliki: `dataset/images/`, `labels_yolo/`, `labels_raport/`, `labels_pose/`.
 
 ## Release (pętla główna)
 
@@ -131,6 +172,17 @@ Nagranie z pliku (obrót tylko w skrypcie, oryginał `.mov` bez zmian):
 
 ```bash
 python3 -m release.run_video --video Droniada_nag1.mov --rotate 180 --mode both --preview --interval-ms 500
+```
+
+**Tarot T10X-2A** (gimbal z nagrania `Droniad_nag2.mov`): profil intrinsics w `config/tarot_t10x_2a.json` — zoom 10×, ogniskowa **4.9–49 mm**, FOV **66.6°–7.2°**, 1080p ([spec](http://tarotrc.com/Product/Detail.aspx?Lang=en&Id=2e704832-d576-4baa-aba1-4706543034f8)). Przy `wide` dla 1920×1080: **fx≈1461** (zamiast domyślnego 1000).
+
+```bash
+# test modułu B na nagraniu (auto profil tarot wide)
+python3 -m release.run_live_panel --video Droniad_nag2.mov --no-loop --rotate 180 --no-color-detect --interval-ms 300 --max-frames 40
+
+# inny zoom optyczny (1=wide … 10=tele)
+python3 -m release.run_live_panel --video Droniad_nag2.mov --no-loop --camera-profile tarot_t10x_2a:mid
+python3 -m release.run_live_panel --video Droniad_nag2.mov --zoom-ratio 5
 ```
 
 Narożniki: **`detect_corners_panel`** — najpierw czarna siatka (HSV/LAB), dopiero gdy to nie zadziała, ukryty zapas Canny (bez osobnych `canny_*` w logach).

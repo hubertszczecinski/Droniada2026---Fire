@@ -13,13 +13,42 @@ RECT_W = 1000
 RECT_H = 500
 
 def parse_report_line(line):
+    """Parsuje linię raportu (regulamin 2026 + starsze logi z datasetu)."""
+    from module_panel.competition_report import (
+        normalize_color_name,
+        parse_competition_report_line,
+        snap_panel_angle_deg,
+    )
+    rec = parse_competition_report_line(line)
+    if rec is not None and rec.get('event') == 'card_detected':
+        ck = rec.get('color_key')
+        color = ck if ck else str(rec.get('color', '')).upper()
+        return {
+            'panel': rec['panel'],
+            'angle_deg': int(rec['angle_deg']),
+            'x': int(rec['x']),
+            'y': int(rec['y']),
+            'color': color,
+        }
     line = line.strip()
     if not line:
         return None
-    m = re.search('Panel:\\s*([A-Z])\\s*\\((\\d+)°(?:\\s*\\|\\s*[^)]+)?\\)\\s*\\|\\s*Pozycja:\\s*Wiersz\\s*(\\d+),\\s*Kolumna\\s*(\\d+)\\s*\\|\\s*Kolor:\\s*([A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż]+)', line)
+    m = re.search(
+        'Panel:\\s*([A-Z])\\s*\\((\\d+)°(?:\\s*\\|\\s*[^)]+)?\\)\\s*\\|\\s*'
+        'Pozycja:\\s*Wiersz\\s*(\\d+),\\s*Kolumna\\s*(\\d+)\\s*\\|\\s*'
+        'Kolor:\\s*([A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż]+)',
+        line,
+    )
     if not m:
         return None
-    return {'panel': m.group(1), 'angle_deg': int(m.group(2)), 'x': int(m.group(4)), 'y': int(m.group(3)), 'color': m.group(5).upper()}
+    ck = normalize_color_name(m.group(5))
+    return {
+        'panel': m.group(1),
+        'angle_deg': snap_panel_angle_deg(int(m.group(2))),
+        'x': int(m.group(4)),
+        'y': int(m.group(3)),
+        'color': ck if ck else m.group(5).upper(),
+    }
 
 def load_gt(path):
     out = []

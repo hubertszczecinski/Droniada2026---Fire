@@ -1,0 +1,32 @@
+{
+  "schema": "droniada_test_mov_gt_v1",
+  "video": "dataset/my_capture/Test.mov",
+  "rotate_deg": 180,
+  "cells": [
+    {
+      "color": "ZOLTA",
+      "row": 1,
+      "col": 2,
+      "user_label": "1,2"
+    },
+    {
+      "color": "CZERWONA",
+      "row": 9,
+      "col": 3,
+      "user_label": "3,9"
+    },
+    {
+      "color": "NIEBIESKA",
+      "row": 8,
+      "col": 6,
+      "user_label": "6,8"
+    },
+    {
+      "color": "ZIELONA",
+      "row": 9,
+      "col": 1,
+      "user_label": "9,1"
+    }
+  ],
+  "notes": "Etykiety user_label jak x,y w migawce (kolumna,wiersz). row/col = siatka konkursowa (wiersz 1 = dół panelu)."
+}

@@ -99,6 +99,8 @@ def analyze_panel_image(
     allowed_orbit_steps: Optional[Set[int]] = None,
     min_homography_inliers: int = 12,
     max_reproj_px: float = 8.0,
+    corners_px: Optional[np.ndarray] = None,
+    corner_source: Optional[str] = None,
 ) -> PanelAnalyzeResult:
     if xy_mode not in _XY_MODES:
         raise ValueError(xy_mode)
@@ -111,15 +113,19 @@ def analyze_panel_image(
     img_work, k_work, dist_work, und_meta = prepare_image_geom(image_bgr, k, dist, calib_path=camera_calib_path)
     prefer_geom = xy_mode == 'geom_grid'
     prefer_lines = xy_mode == 'line_grid'
-    corners_px, corner_source = detect_panel_corners_for_module_b(
-        img_work,
-        yolo_det,
-        prefer_geom_vp=prefer_geom,
-        prefer_line_grid=prefer_lines,
-        k=k_work,
-        dist=dist_work,
-        min_homography_inliers=min_homography_inliers,
-    )
+    if corners_px is not None and corners_px.shape == (4, 2):
+        corner_source = corner_source or 'provided'
+        corners_px = corners_px.astype(np.float32)
+    else:
+        corners_px, corner_source = detect_panel_corners_for_module_b(
+            img_work,
+            yolo_det,
+            prefer_geom_vp=prefer_geom,
+            prefer_line_grid=prefer_lines,
+            k=k_work,
+            dist=dist_work,
+            min_homography_inliers=min_homography_inliers,
+        )
     if corners_px is None:
         return PanelAnalyzeResult(predictions=[], warped_bgr=image_bgr.copy(), homography=np.eye(3, dtype=np.float32), report_angle_deg=0, panel_angle_category='horizontal', meta={'xy_mode': xy_mode, 'angle_source': angle_source, 'pnp_ok': False, 'corner_source': 'none', 'err': 'no_corners', **und_meta})
     ok_pnp, rvec, _tvec, reproj = solve_panel_pose(corners_px, k_work, dist_work)

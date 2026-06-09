@@ -1,0 +1,27 @@
+{
+  "schema": "droniada_panel_color_layout_v1",
+  "name": "bez nazwy.mov — kalibracja kolorów",
+  "video": "dataset/my_capture/bez nazwy.mov",
+  "rotate_deg": 180,
+  "cells": [
+    {
+      "color": "NIEBIESKA",
+      "row": 7,
+      "col": 3,
+      "label": "3,7"
+    },
+    {
+      "color": "CZERWONA",
+      "row": 4,
+      "col": 6,
+      "label": "6,4"
+    },
+    {
+      "color": "ZOLTA",
+      "row": 6,
+      "col": 8,
+      "label": "8,6"
+    }
+  ],
+  "notes": "Pozycje kartezjańskie (kolumna,wiersz) po obrocie 180° jak w Test.mov."
+}

@@ -1,0 +1,24 @@
+{
+  "description": "Czas przy 1/2/3: użyj {{NOW}} w liniach (datetime przy kliknięciu). +offset: {{NOW+1s}}, {{NOW+500ms}}. Stary format [12:00:00.000] też działa.",
+  "time_vars": {
+    "NOW": "{{NOW}}"
+  },
+  "panels": {
+    "A": [
+      "{{NOW}} WYKRYTO ZMIANE -> Panel: A (45°) | Pozycja: Wiersz 4, Kolumna 4 | Kolor: pomaranczowa",
+      "{{NOW+1s+523ms}} WYKRYTO ZMIANE -> Panel: A (45°) | Pozycja: Wiersz 8, Kolumna 2 | Kolor: niebieska",
+      "{{NOW+3s+789ms}} WYKRYTO ZMIANE -> Panel: A (45°) | Pozycja: Wiersz 3, Kolumna 9 | Kolor: zolta"
+    ],
+    "B": [
+      "{{NOW}} WYKRYTO ZMIANE -> Panel: B (90°) | Pozycja: Wiersz 3, Kolumna 5 | Kolor: zielona",
+      "{{NOW+1s+23ms}} WYKRYTO ZMIANE -> Panel: B (90°) | Pozycja: Wiersz 9, Kolumna 5 | Kolor: pomaranczowa",
+      "{{NOW+1s+444ms}} WYKRYTO ZMIANE -> Panel: B (90°) | Pozycja: Wiersz 9, Kolumna 9 | Kolor: czerwona"
+    ],
+    "C": [
+      "{{NOW+234ms}} WYKRYTO ZMIANE -> Panel: C (45°) | Pozycja: Wiersz 8, Kolumna 2 | Kolor: czerwona",
+      "{{NOW+1s+345ms}} WYKRYTO ZMIANE -> Panel: C (45°) | Pozycja: Wiersz 9, Kolumna 7 | Kolor: niebieska",
+      "{{NOW+2s+2ms}} WYKRYTO ZMIANE -> Panel: C (45°) | Pozycja: Wiersz 4, Kolumna 5 | Kolor: pomaranczowa",
+      "{{NOW+2s+23ms}} WYKRYTO ZMIANE -> Panel: C (45°) | Pozycja: Wiersz 3, Kolumna 1 | Kolor: fioletowa"
+    ]
+  }
+}

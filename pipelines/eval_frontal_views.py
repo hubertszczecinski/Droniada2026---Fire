@@ -50,7 +50,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--dataset', default='dataset')
     ap.add_argument('--max-images', type=int, default=600)
-    ap.add_argument('--xy-mode', default='grid_geom_white', choices=['grid_geom', 'grid_geom_white'])
+    ap.add_argument('--xy-mode', default='grid_geom_white', choices=['grid_geom', 'grid_geom_white', 'warp_grid'])
     ap.add_argument('--angle-source', default='rmat_linear')
     ap.add_argument('--compare-non-frontal', action='store_true')
     args = ap.parse_args()

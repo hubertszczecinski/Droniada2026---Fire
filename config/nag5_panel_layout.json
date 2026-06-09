@@ -1,0 +1,27 @@
+{
+  "schema": "droniada_panel_color_layout_v1",
+  "name": "Droniada_nag5.mov — kalibracja kolorów (offline)",
+  "video": "dataset/my_capture/Droniada_nag5.mov",
+  "rotate_deg": 180,
+  "cells": [
+    {
+      "color": "POMARANCZOWA",
+      "row": 3,
+      "col": 3,
+      "label": "3,3"
+    },
+    {
+      "color": "ZOLTA",
+      "row": 9,
+      "col": 2,
+      "label": "2,9"
+    },
+    {
+      "color": "ZIELONA",
+      "row": 3,
+      "col": 8,
+      "label": "8,3"
+    }
+  ],
+  "notes": "Tylko do extract_panel_colors — nie ustawiaj DRONIADA_PANEL_LAYOUT w runtime."
+}

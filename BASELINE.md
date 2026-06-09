@@ -1,27 +1,35 @@
-# Baseline modułu B — `line_grid` v3
+# Baseline modułu B
 
-Stan zapisany jako punkt odniesienia po ewaluacji na datasecie (frontal, `reliable-only` v2).
+**Aktualna migawka (live YOLO + CXY latch):** [`docs/MODULE_B_SNAPSHOT.md`](docs/MODULE_B_SNAPSHOT.md) (2026-05-20)
 
-## Metryki (orbit step 0)
+**Format raportu online (regulamin 2026):** [`docs/COMPETITION_REPORT.md`](docs/COMPETITION_REPORT.md)
 
-| Tryb | Klatki reliable | CXY kart |
-|------|-----------------|----------|
-| `grid_geom_white` | 18 | 81.9% |
-| **`line_grid` v3** | **22** | **93.2%** |
+**Jetson (Docker, pełny panel :8088):** [`docs/JETSON_DOCKER.md`](docs/JETSON_DOCKER.md)
 
-Kategorie (reliable): 45° **100%**, poziome **93%**, pionowe **89%**.
-
-## Pliki
-
-- `module_geom/line_grid.py` — rogi (img_panel / black_panel / warp) + wybór XY
-- `module_panel/analyze.py` — integracja `line_grid`
-- `dataset/results/eval_frontal_line_grid_v3.json`
-- `dataset/debug_line_grid_v3/`
-
-## Live
+Weryfikacja:
 
 ```bash
-python3 -m release.run_live_panel --preview --camera 1 --rotate 180 --xy-mode line_grid
+chmod +x scripts/verify_module_b_snapshot.sh
+./scripts/verify_module_b_snapshot.sh
 ```
 
-Opcjonalnie: `--require-reliable`, `--log-file live_panel.log`, `--save-dir live_captures`
+---
+
+## Szybki start (produkcja)
+
+```bash
+export DRONIADA_YOLO_POSE_WEIGHTS="$(pwd)/runs/pose/droniada_real_finetune/weights/best.pt"
+.venv_yolo/bin/python -m release.run_live_panel \
+  --video dataset/my_capture/Droniada_nag3.mov --rotate 180 \
+  --corner-mode yolo_pose --cxy-latch
+```
+
+Po zatrzaśnięciu: okno `droniada_cxy_zatrzask`, pliki w `dataset/debug_cxy_latch/`.
+
+---
+
+## Starszy baseline CV (archiwum)
+
+Opis ścieżki `align_hybrid` + żółty trapez + `line_grid` bez YOLO latch — nadal w kodzie (`--corner-mode roi_hybrid` itd.), ale **nie** jest już główną ścieżką z tej migawki.
+
+Szczegóły historyczne: commit `2929f7f` — „Ustal baseline modułu B: line_grid v3 i live test na kamerze.”

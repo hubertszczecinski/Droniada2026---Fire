@@ -1,0 +1,22 @@
+{
+  "source": "calibrate n=881 weights=runs/pose/droniada_real_finetune/weights/best.pt",
+  "note": "correction_px dodawane do pred (pred + correction ≈ GT)",
+  "corners": {
+    "TL": [
+      5.9,
+      -0.8
+    ],
+    "TR": [
+      0.3,
+      1.4
+    ],
+    "BR": [
+      -0.4,
+      1.2
+    ],
+    "BL": [
+      3.2,
+      5.8
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+# Jetson (L4T) + CUDA — panel live Droniada (YOLO-Pose + moduł A/B).
+#
+# Dopasuj tag do JetPack na urządzeniu, np.:
+#   docker build --build-arg L4T_ML_TAG=r36.4.0 -f docker/Dockerfile.vision -t droniada-vision .
+ARG L4T_ML_TAG=r36.4.0
+FROM dustynv/l4t-ml:${L4T_ML_TAG}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    DRONIADA_DEVICE=0 \
+    DRONIADA_CAMERA=0 \
+    DRONIADA_YOLO_BIAS=1 \
+    DRONIADA_YOLO_POSE_WEIGHTS=/ws/runs/pose/droniada_real_finetune/weights/best.pt \
+    DRONIADA_WEB_PORT=8088
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    v4l-utils \
+    libv4l-dev \
+    libglib2.0-0 \
+    libgstreamer1.0-0 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-tools \
+    python3-gi \
+    gir1.2-gstreamer-1.0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /ws
+
+COPY docker/requirements.vision.txt /tmp/requirements.vision.txt
+RUN rm -f /etc/pip.conf /root/.config/pip/pip.conf 2>/dev/null; \
+    pip3 install --no-cache-dir -r /tmp/requirements.vision.txt \
+    --index-url https://pypi.org/simple
+
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["droniada-vision"]

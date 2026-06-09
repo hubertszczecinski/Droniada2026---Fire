@@ -1,0 +1,75 @@
+# Droniada na Jetson — kontener z pełnym panelem WWW na porcie hosta.
+#
+#   export WS_ROOT_PATH=~/acoustics/droniada
+#   docker compose -f docker-compose.jetson.yml up --build
+#
+# Podgląd: http://<jetson-ip>:${DRONIADA_HOST_PORT:-8088}/
+
+name: droniada
+
+services:
+  droniada_vision:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.vision
+      args:
+        L4T_ML_TAG: ${L4T_ML_TAG:-r36.4.0}
+    image: droniada-vision:latest
+    container_name: droniada_vision
+    runtime: nvidia
+    privileged: true
+    restart: unless-stopped
+    # Host network — :8088/:8089 na wszystkich interfejsach Jetsona (bez NAT Dockera).
+    network_mode: host
+    devices:
+      - ${DRONIADA_VIDEO_DEVICE:-/dev/video0}:/dev/video0
+    group_add:
+      - video
+    volumes:
+      - ${WS_ROOT_PATH:-.}:/ws
+    entrypoint: ["/ws/docker/entrypoint.sh"]
+    environment:
+      - DRONIADA_WEB_PORT=8088
+      - DRONIADA_WEB_CONTROL_PORT=8089
+      - DRONIADA_WEB_BIND=0.0.0.0
+      - DRONIADA_MISSION_PANELS=${DRONIADA_MISSION_PANELS:-A,B,C}
+      - DRONIADA_SNAPSHOTS_PER_PANEL=${DRONIADA_SNAPSHOTS_PER_PANEL:-5}
+      - DRONIADA_DEVICE=${DRONIADA_DEVICE:-0}
+      - DRONIADA_CAMERA=${DRONIADA_CAMERA:-0}
+      - DRONIADA_CAMERA_DEVICE=${DRONIADA_CAMERA_DEVICE:-/dev/video0}
+      - DRONIADA_CAMERA_FOURCC=${DRONIADA_CAMERA_FOURCC:-MJPG}
+      - DRONIADA_CAMERA_WIDTH=${DRONIADA_CAMERA_WIDTH:-1920}
+      - DRONIADA_CAMERA_HEIGHT=${DRONIADA_CAMERA_HEIGHT:-1080}
+      - DRONIADA_USE_GST_CAPTURE=${DRONIADA_USE_GST_CAPTURE:-1}
+      - DRONIADA_GST_HW_JPEG=${DRONIADA_GST_HW_JPEG:-1}
+      - DRONIADA_CAMERA_BRIGHTNESS=${DRONIADA_CAMERA_BRIGHTNESS:-60}
+      - DRONIADA_ROTATE=180
+      - DRONIADA_YOLO_POSE_WEIGHTS=/ws/runs/pose/droniada_real_finetune/weights/best.pt
+      - DRONIADA_WEB_ENABLED=${DRONIADA_WEB_ENABLED:-1}
+      - DRONIADA_CAP_PIPELINE=${DRONIADA_CAP_PIPELINE:-}
+      - DRONIADA_VIDEO_FILE=${DRONIADA_VIDEO_FILE:-}
+      - DRONIADA_VIDEO_LOOP=${DRONIADA_VIDEO_LOOP:-1}
+      - DRONIADA_SMOOTH_ALPHA=${DRONIADA_SMOOTH_ALPHA:-}
+      - DRONIADA_HOLD_FRAMES=${DRONIADA_HOLD_FRAMES:-}
+      - DRONIADA_INTERVAL_MS=${DRONIADA_INTERVAL_MS:-}
+      - DRONIADA_TRACKER_GOOD_REPROJ=${DRONIADA_TRACKER_GOOD_REPROJ:-}
+      - DRONIADA_CARD_COLORS=${DRONIADA_CARD_COLORS:-}
+      - DRONIADA_WS_URL=${DRONIADA_WS_URL:-}
+      - DRONIADA_AUTONOMY_WS_URL=${DRONIADA_AUTONOMY_WS_URL:-}
+      - DRONIADA_AUTONOMY_HOLD_PAUSE_S=${DRONIADA_AUTONOMY_HOLD_PAUSE_S:-}
+      - DRONIADA_PANEL_MIN_AREA_FRAC=${DRONIADA_PANEL_MIN_AREA_FRAC:-0.02}
+      - DRONIADA_REPORT_MODE=${DRONIADA_REPORT_MODE:-live}
+      - DRONIADA_PRESET_REPORTS=${DRONIADA_PRESET_REPORTS:-/ws/config/preset_reports.json}
+      - DRONIADA_STREAM_SOURCE=${DRONIADA_STREAM_SOURCE:-vis}
+      - DRONIADA_VIS_PREVIEW_INTERVAL_S=${DRONIADA_VIS_PREVIEW_INTERVAL_S:-0.033}
+      - DRONIADA_STREAM_INTERVAL_S=${DRONIADA_STREAM_INTERVAL_S:-0.04}
+      - DRONIADA_STREAM_WIDTH=${DRONIADA_STREAM_WIDTH:-1280}
+      - DRONIADA_STREAM_JPEG_QUALITY=${DRONIADA_STREAM_JPEG_QUALITY:-75}
+      - DRONIADA_STREAM_PASSTHROUGH=${DRONIADA_STREAM_PASSTHROUGH:-1}
+      - DRONIADA_CAMERA_FPS=${DRONIADA_CAMERA_FPS:-30}
+      - OPENCV_VIDEOIO_PRIORITY_LIST=V4L2,GSTREAMER
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+    command: >
+      droniada-vision
+    stop_grace_period: 15s

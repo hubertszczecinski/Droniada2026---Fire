@@ -1,0 +1,56 @@
+{
+  "snapshot_id": "module_b_live_cxy_latch",
+  "snapshot_date": "2026-05-20",
+  "description": "YOLO-Pose rogi + warp HSV na macie + CxyLatch z oknem podgladu",
+  "git_commit_hint": "2929f7fdb4282254989672f72ce10bc682a7d632",
+  "weights": {
+    "yolo_pose": "runs/pose/droniada_real_finetune/weights/best.pt",
+    "yolo_corner_bias": "module_panel/data/yolo_corner_bias.json",
+    "env_yolo_weights": "DRONIADA_YOLO_POSE_WEIGHTS",
+    "env_yolo_bias": "DRONIADA_YOLO_BIAS"
+  },
+  "live_defaults": {
+    "corner_mode": "yolo_pose",
+    "xy_mode": "line_grid",
+    "angle_source": "rmat_linear",
+    "rotate_deg": 180,
+    "camera_profile": "tarot_t10x_2a:wide",
+    "max_reproj_reliable_px": 18,
+    "min_homography_inliers": 12,
+    "cxy_stable_frames": 5,
+    "cxy_latch_dir": "dataset/debug_cxy_latch"
+  },
+  "color_detect": {
+    "panel_inset_frac": 0.06,
+    "min_valid_cell_frac": 0.5,
+    "min_inside_panel_px": 12,
+    "min_on_panel_ring_frac": 0.88,
+    "scan_grid": "10x10 full (no outer ring skip)",
+    "classify_on": "warp_pixels_inside_inner_trapezoid"
+  },
+  "regression_tests": [
+    "tests/test_live_card_detect_nag3.py",
+    "tests/test_cxy_latch_preview.py"
+  ],
+  "regression_fixture": {
+    "video": "dataset/my_capture/Droniada_nag3.mov",
+    "frames": {
+      "3": [{"grid_row": 8, "grid_col": 7, "color": "POMARANCZOWA"}],
+      "4": [{"grid_row": 8, "grid_col": 7, "color": "POMARANCZOWA"}]
+    }
+  },
+  "entrypoint": "release.run_live_panel",
+  "windows": {
+    "live": "droniada_live_panel",
+    "latch": "droniada_cxy_zatrzask"
+  },
+  "core_modules": [
+    "release/run_live_panel.py",
+    "release/live_corners.py",
+    "release/yolo_pose_live.py",
+    "release/live_card_detect.py",
+    "release/cxy_latch.py",
+    "release/cxy_latch_preview.py",
+    "release/panel_black.py"
+  ]
+}

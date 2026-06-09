@@ -4,8 +4,28 @@ import json
 import math
 import os
 import random
+import sys
 import mathutils
+
 _BASE = os.path.dirname(os.path.abspath(__file__))
+if _BASE not in sys.path:
+    sys.path.insert(0, _BASE)
+
+
+def _load_format_card_detected_line():
+    """Bez importu module_panel.__init__ (wymaga cv2 w Blenderze)."""
+    import importlib.util
+
+    path = os.path.join(_BASE, 'module_panel', 'competition_report.py')
+    spec = importlib.util.spec_from_file_location('droniada_competition_report', path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f'Nie można załadować {path}')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.format_card_detected_line
+
+
+format_card_detected_line = _load_format_card_detected_line()
 DATASET_PATH = os.path.join(_BASE, os.environ.get('DRONIADA_DATASET_SUBDIR', 'dataset'))
 IMAGES_PATH = os.path.join(DATASET_PATH, 'images')
 LABELS_YOLO_PATH = os.path.join(DATASET_PATH, 'labels_yolo')
@@ -20,9 +40,27 @@ CAMERA_XY_DIST_M = float(os.environ.get('DRONIADA_CAMERA_XY_DIST_M', '8.25'))
 CAMERA_LOOK_BELOW_CENTER_M = 0.42
 CAMERA_LATERAL_M = 0.58
 CAMERA_TARGET_LATERAL_M = 0.24
-ORBIT_ARC_DEG = float(os.environ.get('DRONIADA_ORBIT_ARC_DEG', '360'))
-VIEWS_PER_SCENE = int(os.environ.get('DRONIADA_ORBIT_STEPS', '12'))
-CAMERA_FRONT_MIN_DOT = float(os.environ.get('DRONIADA_MIN_FRONT_DOT', '0.08'))
+ORBIT_ARC_DEG = float(os.environ.get('DRONIADA_ORBIT_ARC_DEG', '50'))
+VIEWS_PER_SCENE = int(os.environ.get('DRONIADA_ORBIT_STEPS', '9'))
+# Minimalny cos(kąta) między wektorem do kamery a normalną przodu panelu (1=prostopadle).
+# 0.58 ≈ kąt do ~54° — odrzuca tył i czysty bok (cienka krawędź).
+CAMERA_FRONT_MIN_DOT = float(os.environ.get('DRONIADA_MIN_FRONT_DOT', '0.72'))
+MIN_PANEL_SPAN_PX = float(os.environ.get('DRONIADA_MIN_PANEL_SPAN_PX', '200'))
+MIN_PANEL_AREA_FRAC = float(os.environ.get('DRONIADA_MIN_PANEL_AREA_FRAC', '0.06'))
+
+
+def _parse_orbit_azimuth_deg_list():
+    """Lista kątów względem frontu panelu (0=frontal). Pusta/full/360 = łuk ORBIT_ARC_DEG."""
+    raw = os.environ.get(
+        'DRONIADA_ORBIT_AZIMUTHS',
+        '-22,-14,-7,0,7,14,22',
+    )
+    if raw.strip().lower() in ('full', '360', 'legacy'):
+        return None
+    return [float(x.strip()) for x in raw.split(',') if x.strip()]
+
+
+ORBIT_AZIMUTH_DEG_LIST = _parse_orbit_azimuth_deg_list()
 CARD_CELLS_BY_ANGLE = {'horizontal': [(3, 2), (8, 5), (5, 8), (9, 3)], 'vertical': [(2, 4), (7, 3), (4, 9), (10, 7)], '45_deg': [(3, 4), (8, 3), (5, 7), (10, 5)]}
 
 def panel_angle_category(stand_id: str) -> str:
@@ -192,13 +230,78 @@ def panel_front_normal_and_center(board_obj):
     n = (mw.to_3x3() @ mathutils.Vector((0.0, 0.0, 1.0))).normalized()
     return (center, n)
 
-def camera_sees_panel_front(cam_obj, board_obj, min_dot=0.14):
+def camera_sees_panel_front(cam_obj, board_obj, min_dot=None):
+    """Kamera w półkuli przed siatką (+local Z panelu)."""
     center, fn = panel_front_normal_and_center(board_obj)
     to_cam = mathutils.Vector(cam_obj.location) - center
     if to_cam.length < 1e-06:
         return False
     to_cam.normalize()
-    return to_cam.dot(fn) >= min_dot
+    thr = CAMERA_FRONT_MIN_DOT if min_dot is None else float(min_dot)
+    return to_cam.dot(fn) >= thr
+
+
+def white_anchor_in_front(scene, cam, board_obj):
+    """Biały znacznik na siatce musi być przed kamerą (nie plecy panelu)."""
+    anchor = None
+    for ch in board_obj.children:
+        if ch.type != 'MESH' or not ch.data:
+            continue
+        for mat in ch.data.materials:
+            if mat and 'White_Anchor' in mat.name:
+                anchor = ch
+                break
+        if anchor is not None:
+            break
+    if anchor is None:
+        return True
+    co = anchor.matrix_world @ mathutils.Vector((0.0, 0.0, 0.0))
+    c = bpy_extras.object_utils.world_to_camera_view(scene, cam, co)
+    if c.z <= 0.05:
+        return False
+    return 0.04 <= c.x <= 0.96 and 0.04 <= c.y <= 0.96
+
+
+def projected_panel_bbox_px(scene, cam, board_obj):
+    """Rozpiętość rzutu panelu w px oraz ułamek pola kadru."""
+    mw = board_obj.matrix_world
+    w_img = float(scene.render.resolution_x)
+    h_img = float(scene.render.resolution_y)
+    xs, ys = [], []
+    for corner in board_obj.bound_box:
+        co = mw @ mathutils.Vector(corner)
+        c = bpy_extras.object_utils.world_to_camera_view(scene, cam, co)
+        if c.z <= 0.0:
+            return 0.0, 0.0, 0.0, 0.0
+        xs.append(float(c.x) * w_img)
+        ys.append((1.0 - float(c.y)) * h_img)
+    if not xs:
+        return 0.0, 0.0, 0.0, 0.0
+    w_px = float(max(xs) - min(xs))
+    h_px = float(max(ys) - min(ys))
+    area_frac = (w_px * h_px) / max(1.0, w_img * h_img)
+    return w_px, h_px, float(min(w_px, h_px)), area_frac
+
+
+def camera_view_is_usable(scene, cam, board_obj, margin=0.04):
+    """Odrzuca tył panelu, czysty bok (cienka krawędź) i zbyt mały panel w kadrze."""
+    if not camera_sees_panel_front(cam, board_obj):
+        return False, 'back_or_grazing'
+    if not white_anchor_in_front(scene, cam, board_obj):
+        return False, 'grid_anchor_behind'
+    if not board_corners_in_frame(scene, cam, board_obj, margin=margin):
+        return False, 'corners_oob'
+    w_px, h_px, min_span, area_frac = projected_panel_bbox_px(scene, cam, board_obj)
+    if min_span < MIN_PANEL_SPAN_PX:
+        return False, f'thin_side_span={min_span:.0f}'
+    if area_frac < MIN_PANEL_AREA_FRAC:
+        return False, f'small_area={area_frac:.3f}'
+    # Panel 2x1 m: z boku jeden wymiar w px zapada — max/min bbox nie może być ekstremalny.
+    short_side = max(1.0, min(w_px, h_px))
+    long_side = max(w_px, h_px)
+    if long_side / short_side > 5.5:
+        return False, f'edge_aspect={long_side / short_side:.1f}'
+    return True, 'ok'
 
 def board_world_z_range(board_obj):
     dg = bpy.context.evaluated_depsgraph_get()
@@ -278,6 +381,7 @@ def place_camera_fixed_drone_view(scene, cam, target, board_obj):
     lc0 = CAMERA_LATERAL_M
     lt0 = CAMERA_TARGET_LATERAL_M
     below = CAMERA_LOOK_BELOW_CENTER_M
+    reject_reason = 'no_valid_pose'
     for scale in (1.0, 0.9, 1.1, 0.82, 1.18):
         d = d0 * scale
         lc = lc0 * scale
@@ -286,15 +390,30 @@ def place_camera_fixed_drone_view(scene, cam, target, board_obj):
         target.location = (center.x + right.x * lt, center.y + right.y * lt, center.z - below)
         apply_camera_look_at_world_z_up(cam, target.location)
         bpy.context.view_layer.update()
-        if board_corners_in_frame(scene, cam, board_obj, margin=0.038) and camera_sees_panel_front(cam, board_obj, min_dot=CAMERA_FRONT_MIN_DOT):
-            return {'placement': 'fixed_z_oblique', 'height_world_z_m': CAMERA_HEIGHT_Z_M, 'horizontal_dist_xy_m': float(d), 'lateral_cam_m': float(lc), 'look_below_panel_center_m': float(below), 'target_lateral_m': float(lt), 'world_z_up_no_roll': True}
-    cam.location = (center.x + fn_xy.x * d0, center.y + fn_xy.y * d0, CAMERA_HEIGHT_Z_M)
-    target.location = (center.x, center.y, center.z - below)
-    apply_camera_look_at_world_z_up(cam, target.location)
-    bpy.context.view_layer.update()
-    return {'placement': 'fixed_z_oblique_fallback', 'height_world_z_m': CAMERA_HEIGHT_Z_M, 'horizontal_dist_xy_m': float(d0), 'lateral_cam_m': 0.0, 'look_below_panel_center_m': float(below), 'target_lateral_m': 0.0, 'world_z_up_no_roll': True}
+        ok_view, reject_reason = camera_view_is_usable(scene, cam, board_obj, margin=0.038)
+        if ok_view:
+            return {
+                'placement': 'fixed_z_oblique',
+                'accepted': True,
+                'height_world_z_m': CAMERA_HEIGHT_Z_M,
+                'horizontal_dist_xy_m': float(d),
+                'lateral_cam_m': float(lc),
+                'look_below_panel_center_m': float(below),
+                'target_lateral_m': float(lt),
+                'world_z_up_no_roll': True,
+            }
+    return {'placement': 'fixed_rejected', 'accepted': False, 'reject_reason': reject_reason}
 
-def place_camera_orbit_step(scene, cam, target, board_obj, step_index, num_steps, arc_deg=360.0):
+def place_camera_orbit_step(
+    scene,
+    cam,
+    target,
+    board_obj,
+    step_index,
+    num_steps,
+    arc_deg=360.0,
+    azimuth_deg=None,
+):
     center, fn = panel_front_normal_and_center(board_obj)
     fn.normalize()
     world_up = mathutils.Vector((0.0, 0.0, 1.0))
@@ -303,12 +422,21 @@ def place_camera_orbit_step(scene, cam, target, board_obj, step_index, num_steps
         fn_xy = mathutils.Vector((0.0, -1.0, 0.0))
     fn_xy.normalize()
     tangent = world_up.cross(mathutils.Vector((fn_xy.x, fn_xy.y, 0.0))).normalized()
-    if num_steps <= 1:
+    az_offset = None
+    if azimuth_deg is not None:
+        theta = math.radians(float(azimuth_deg))
+        az_offset = float(azimuth_deg)
+    elif num_steps <= 1:
         theta = 0.0
+        az_offset = 0.0
     elif arc_deg >= 359.99:
         theta = 2.0 * math.pi * float(step_index) / float(num_steps)
+        az_offset = math.degrees(theta)
     else:
-        theta = math.radians(float(arc_deg)) * float(step_index) / float(max(1, num_steps - 1))
+        # Symetryczny łuk wokół frontu: -arc/2 .. +arc/2 (nie 0..arc — to schodziło na tył/bok).
+        half = float(arc_deg) / 2.0
+        az_offset = -half + float(arc_deg) * float(step_index) / float(max(1, num_steps - 1))
+        theta = math.radians(az_offset)
     dir_h = mathutils.Vector((fn_xy.x * math.cos(theta) + tangent.x * math.sin(theta), fn_xy.y * math.cos(theta) + tangent.y * math.sin(theta), 0.0))
     if dir_h.length < 1e-06:
         dir_h = fn_xy.copy()
@@ -320,6 +448,7 @@ def place_camera_orbit_step(scene, cam, target, board_obj, step_index, num_steps
     lc0 = CAMERA_LATERAL_M * 0.35
     lt0 = CAMERA_TARGET_LATERAL_M * 0.35
     below = CAMERA_LOOK_BELOW_CENTER_M
+    reject_reason = 'no_valid_pose'
     for scale in (1.0, 0.88, 1.05, 0.75, 1.12, 1.2):
         d = CAMERA_XY_DIST_M * scale
         lc = lc0 * scale
@@ -328,20 +457,41 @@ def place_camera_orbit_step(scene, cam, target, board_obj, step_index, num_steps
         target.location = (center.x + lateral.x * lt, center.y + lateral.y * lt, center.z - below)
         apply_camera_look_at_world_z_up(cam, target.location)
         bpy.context.view_layer.update()
-        if board_corners_in_frame(scene, cam, board_obj, margin=0.03) and camera_sees_panel_front(cam, board_obj, min_dot=CAMERA_FRONT_MIN_DOT):
-            return {'placement': 'orbit_z_oblique', 'height_world_z_m': CAMERA_HEIGHT_Z_M, 'orbit_azimuth_deg': round(math.degrees(theta) % 360.0, 4), 'orbit_step_index': int(step_index), 'orbit_num_steps': int(num_steps), 'orbit_arc_target_deg': float(arc_deg), 'horizontal_dist_xy_m': float(d), 'lateral_cam_m': float(lc), 'look_below_panel_center_m': float(below), 'target_lateral_m': float(lt), 'world_z_up_no_roll': True}
-    cam.location = (center.x + dir_h.x * CAMERA_XY_DIST_M, center.y + dir_h.y * CAMERA_XY_DIST_M, CAMERA_HEIGHT_Z_M)
-    target.location = (center.x, center.y, center.z - below)
-    apply_camera_look_at_world_z_up(cam, target.location)
-    bpy.context.view_layer.update()
-    if not camera_sees_panel_front(cam, board_obj, min_dot=CAMERA_FRONT_MIN_DOT):
-        dir_h = -dir_h
-        cam.location = (center.x + dir_h.x * CAMERA_XY_DIST_M, center.y + dir_h.y * CAMERA_XY_DIST_M, CAMERA_HEIGHT_Z_M)
-        apply_camera_look_at_world_z_up(cam, target.location)
-        bpy.context.view_layer.update()
-    return {'placement': 'orbit_z_oblique_fallback', 'height_world_z_m': CAMERA_HEIGHT_Z_M, 'orbit_azimuth_deg': round(math.degrees(theta) % 360.0, 4), 'orbit_step_index': int(step_index), 'orbit_num_steps': int(num_steps), 'orbit_arc_target_deg': float(arc_deg), 'horizontal_dist_xy_m': float(CAMERA_XY_DIST_M), 'lateral_cam_m': 0.0, 'look_below_panel_center_m': float(below), 'target_lateral_m': 0.0, 'world_z_up_no_roll': True}
+        ok_view, reject_reason = camera_view_is_usable(scene, cam, board_obj, margin=0.03)
+        if ok_view:
+            _w, _h, span_px, area_frac = projected_panel_bbox_px(scene, cam, board_obj)
+            return {
+                'placement': 'orbit_z_oblique',
+                'accepted': True,
+                'panel_projected_min_span_px': round(span_px, 1),
+                'panel_projected_area_frac': round(area_frac, 4),
+                'height_world_z_m': CAMERA_HEIGHT_Z_M,
+                'orbit_azimuth_deg': round(math.degrees(theta) % 360.0, 4),
+                'orbit_azimuth_offset_deg': round(float(az_offset), 4) if az_offset is not None else None,
+                'orbit_step_index': int(step_index),
+                'orbit_num_steps': int(num_steps),
+                'orbit_arc_target_deg': float(arc_deg),
+                'horizontal_dist_xy_m': float(d),
+                'lateral_cam_m': float(lc),
+                'look_below_panel_center_m': float(below),
+                'target_lateral_m': float(lt),
+                'world_z_up_no_roll': True,
+            }
+    # Bez flipu na tył panelu — lepiej pominąć klatkę niż renderować plecy/bok.
+    return {
+        'placement': 'orbit_rejected',
+        'accepted': False,
+        'reject_reason': reject_reason,
+        'orbit_azimuth_offset_deg': round(float(az_offset), 4) if az_offset is not None else None,
+        'orbit_step_index': int(step_index),
+        'orbit_num_steps': int(num_steps),
+    }
 
 def add_panel_back_face(board_obj):
+    """Gruba plecy tylko gdy DRONIADA_PANEL_THICKNESS_M > 0 (domyślnie wyłączone — mylą z tyłem)."""
+    thick = float(os.environ.get('DRONIADA_PANEL_THICKNESS_M', '0'))
+    if thick <= 1e-06:
+        return
     back = bpy.data.materials.new(name='Mat_Panel_Back')
     try:
         back.use_nodes = True
@@ -354,7 +504,7 @@ def add_panel_back_face(board_obj):
         pass
     board_obj.data.materials.append(back)
     sol = board_obj.modifiers.new(name='PanelSolidify', type='SOLIDIFY')
-    sol.thickness = 0.04
+    sol.thickness = thick
     sol.offset = 0.0
     sol.material_offset = 1
 COMPETITION_STAND_MODES = ({'id': 'long_edge_upright_tv', 'label_pl': 'dłuższy bok na ziemi, pion jak TV (szeroka krawędź poziomo w kadrze)', 'long_hinge_rx_deg': 90.0}, {'id': 'long_edge_laptop_45', 'label_pl': 'dłuższy bok na ziemi, nachylenie ~45° (jak ekran laptopa)', 'long_hinge_rx_deg': 45.0}, {'id': 'short_edge_upright', 'label_pl': 'krótszy bok na ziemi, pion (wąski + siatka portret)'}, {'id': 'long_edge_upright_portrait', 'label_pl': 'dłuższy bok na ziemi, siatka obrócona 90° (portret, komórka 1,1 na dole)', 'long_hinge_rx_deg': 90.0})
@@ -374,7 +524,7 @@ def generate_scene_multiview(scene_idx, num_views, global_idx_start):
     cleanup_data()
     scene = bpy.context.scene
     scene.render.engine = 'BLENDER_EEVEE'
-    scene.render.resolution_x = 1024
+    scene.render.resolution_x = 1024 
     scene.render.resolution_y = 1024
     bpy.context.scene.world = bpy.data.worlds.new('World')
     setup_sky_world_gradient()
@@ -397,7 +547,7 @@ def generate_scene_multiview(scene_idx, num_views, global_idx_start):
     add_grass_ground()
     bpy.ops.mesh.primitive_plane_add(size=1, location=(0, 0, 0))
     board = bpy.context.active_object
-    board.scale = (2.0, 1.0, 1.0)
+    board.scale = (2.0, 1.0, 1.0) 
     bpy.ops.object.transform_apply(scale=True)
     board.data.materials.append(create_grid_material())
     add_panel_back_face(board)
@@ -447,7 +597,7 @@ def generate_scene_multiview(scene_idx, num_views, global_idx_start):
         card = bpy.context.active_object
         card.scale = (0.17, 0.085, 1.0)
         bpy.ops.object.transform_apply(scale=True)
-        card.parent = board
+        card.parent = board 
         c_mat = bpy.data.materials.new(name=f'Mat_Card_{i}')
         try:
             c_mat.use_nodes = True
@@ -464,7 +614,10 @@ def generate_scene_multiview(scene_idx, num_views, global_idx_start):
         cl.new(em_c.outputs['Emission'], out_c.inputs['Surface'])
         card.data.materials.append(c_mat)
         cards_data.append((card, COLOR_TO_CLASS[color_name]))
-        log_str = f'[HH:MM:SS.mmm] WYKRYTO ZMIANĘ -> Panel: {panel_id} ({report_skew_deg}° | {angle_cat}) | Pozycja: Wiersz {row}, Kolumna {col} | Kolor: {color_name.upper()}'
+        log_str = format_card_detected_line(
+            panel_id, report_skew_deg, row, col, color_name,
+            timestamp_literal='HH:MM:SS.mmm',
+        )
         log_entries.append(log_str)
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0.0, 0.0, 0.0))
     panel_root = bpy.context.active_object
@@ -524,9 +677,33 @@ def generate_scene_multiview(scene_idx, num_views, global_idx_start):
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0.0, 0.0, 0.0))
     target = bpy.context.active_object
     scene.camera = cam
-    for view_idx in range(num_views):
-        g = global_idx_start + view_idx
-        cam_placement = place_camera_orbit_step(scene, cam, target, board, view_idx, num_views, ORBIT_ARC_DEG)
+    if ORBIT_AZIMUTH_DEG_LIST:
+        view_specs = [(i, float(az)) for i, az in enumerate(ORBIT_AZIMUTH_DEG_LIST)]
+    else:
+        view_specs = [(i, None) for i in range(num_views)]
+    written = 0
+    for view_idx, azimuth_deg in view_specs:
+        cam_placement = place_camera_orbit_step(
+            scene,
+            cam,
+            target,
+            board,
+            view_idx,
+            len(view_specs),
+            ORBIT_ARC_DEG,
+            azimuth_deg=azimuth_deg,
+        )
+        if not cam_placement.get('accepted', False):
+            az_lab = azimuth_deg if azimuth_deg is not None else view_idx
+            print(
+                f'skip scene={scene_idx} azimuth={az_lab} reason={cam_placement.get("reject_reason")}',
+            )
+            continue
+        if not white_anchor_in_front(scene, cam, board):
+            print(f'skip scene={scene_idx} azimuth={az_lab} reason=grid_anchor_behind_final')
+            continue
+        g = global_idx_start + written
+        written += 1
         yolo_path = os.path.join(LABELS_YOLO_PATH, f'img_{g}.txt')
         with open(yolo_path, 'w', encoding='utf-8') as f:
             for card_obj, cls_id in cards_data:
@@ -568,16 +745,50 @@ def generate_scene_multiview(scene_idx, num_views, global_idx_start):
         img_path = os.path.join(IMAGES_PATH, f'img_{g}.png')
         scene.render.filepath = img_path
         bpy.ops.render.render(write_still=True)
-    return num_views
-NUM_SCENES = 25
-VIEWS_FOR_RUN = VIEWS_PER_SCENE
+    return written
+NUM_SCENES = int(os.environ.get('DRONIADA_NUM_SCENES', '25'))
+TARGET_IMAGES = int(os.environ.get('DRONIADA_TARGET_IMAGES', '0'))
+if ORBIT_AZIMUTH_DEG_LIST:
+    VIEWS_FOR_RUN = len(ORBIT_AZIMUTH_DEG_LIST)
+else:
+    VIEWS_FOR_RUN = VIEWS_PER_SCENE
 if os.environ.get('DRONIADA_QUICK_TEST') == '1':
     NUM_SCENES = 5
-    VIEWS_FOR_RUN = int(os.environ.get('DRONIADA_ORBIT_STEPS_QUICK', '4'))
-print(NUM_SCENES, VIEWS_FOR_RUN, ORBIT_ARC_DEG, DATASET_PATH)
+    if ORBIT_AZIMUTH_DEG_LIST:
+        quick_az = os.environ.get('DRONIADA_ORBIT_AZIMUTHS_QUICK', '-20,0,20')
+        ORBIT_AZIMUTH_DEG_LIST = [float(x.strip()) for x in quick_az.split(',') if x.strip()]
+        VIEWS_FOR_RUN = len(ORBIT_AZIMUTH_DEG_LIST)
+    else:
+        VIEWS_FOR_RUN = int(os.environ.get('DRONIADA_ORBIT_STEPS_QUICK', '5'))
+orbit_label = ORBIT_AZIMUTH_DEG_LIST if ORBIT_AZIMUTH_DEG_LIST else f'arc_{ORBIT_ARC_DEG}'
+print(
+    NUM_SCENES,
+    VIEWS_FOR_RUN,
+    orbit_label,
+    'min_dot',
+    CAMERA_FRONT_MIN_DOT,
+    'min_span_px',
+    MIN_PANEL_SPAN_PX,
+    'target_images',
+    TARGET_IMAGES,
+    DATASET_PATH,
+)
+if os.environ.get('DRONIADA_FRESH') == '1':
+    import shutil
+    for sub in ('images', 'labels_yolo', 'labels_raport', 'labels_pose'):
+        p = os.path.join(DATASET_PATH, sub)
+        if os.path.isdir(p):
+            shutil.rmtree(p)
+        os.makedirs(p, exist_ok=True)
+    print('DRONIADA_FRESH=1: wyczyszczono images + labels_*')
 gidx = 0
 for s in range(NUM_SCENES):
+    if TARGET_IMAGES > 0 and gidx >= TARGET_IMAGES:
+        break
     n = generate_scene_multiview(s, VIEWS_FOR_RUN, gidx)
     gidx += n
     print(s, gidx - n, gidx - 1)
+    if TARGET_IMAGES > 0 and gidx >= TARGET_IMAGES:
+        print(f'target_reached={TARGET_IMAGES}')
+        break
 print(gidx, DATASET_PATH)
