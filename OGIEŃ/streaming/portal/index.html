@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Droniada — podgląd sędziowski (Twitch)</title>
+  <style>
+    :root { --bg:#0c0e14; --card:#161a24; --text:#e8eaef; --muted:#8a93a8; --bor:#2a3142; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    header { padding:12px 20px; border-bottom:1px solid var(--bor); }
+    header h1 { margin:0; font-size:1.1rem; }
+    header p { margin:6px 0 0; color:var(--muted); font-size:0.85rem; }
+    main { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:12px; min-height:calc(100vh - 80px); }
+    @media (max-width:900px) { main { grid-template-columns:1fr; } }
+    .panel { background:var(--card); border:1px solid var(--bor); border-radius:8px; overflow:hidden; display:flex; flex-direction:column; }
+    .panel h2 { margin:0; padding:10px 14px; font-size:0.95rem; border-bottom:1px solid var(--bor); }
+    .frame-wrap { position:relative; padding-top:56.25%; background:#000; flex:1; min-height:240px; }
+    .frame-wrap iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
+    .placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:0.9rem; text-align:center; padding:1rem; }
+    footer { padding:10px 20px; color:var(--muted); font-size:0.78rem; border-top:1px solid var(--bor); }
+    code { background:#1e2433; padding:2px 6px; border-radius:4px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Droniada Challenge — Twitch na żywo</h1>
+  <p>Nazwy kanałów w URL: <code>?vision=KANAL1&amp;qgc=KANAL2</code> · embed wymaga aktywnego live na Twitch</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>Stream 1 — wizja / panel operatora</h2>
+    <div class="frame-wrap" id="wrapVision">
+      <div class="placeholder" id="phVision">Brak kanału — <code>?vision=nazwa_kanalu</code></div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Stream 2 — QGroundControl</h2>
+    <div class="frame-wrap" id="wrapQgc">
+      <div class="placeholder" id="phQgc">Brak kanału — <code>?qgc=nazwa_kanalu</code></div>
+    </div>
+  </section>
+</main>
+<footer>
+  Twitch embed na ngrok: parametr <code>parent</code> ustawiany automatycznie z domeny strony.
+</footer>
+<script>
+function channelParam(name) {
+  const q = new URLSearchParams(location.search);
+  return (q.get(name) || '').trim().toLowerCase();
+}
+function twitchParents() {
+  const host = location.hostname || 'localhost';
+  return [host, 'localhost', '127.0.0.1'];
+}
+function mountTwitch(wrapId, phId, channel) {
+  if (!channel) return;
+  const ph = document.getElementById(phId);
+  if (ph) ph.remove();
+  const iframe = document.createElement('iframe');
+  iframe.allowFullscreen = true;
+  const parents = twitchParents().map(p => 'parent=' + encodeURIComponent(p)).join('&');
+  iframe.src = 'https://player.twitch.tv/?channel=' + encodeURIComponent(channel)
+    + '&' + parents + '&autoplay=true&muted=true';
+  document.getElementById(wrapId).appendChild(iframe);
+}
+mountTwitch('wrapVision', 'phVision', channelParam('vision'));
+mountTwitch('wrapQgc', 'phQgc', channelParam('qgc'));
+</script>
+</body>
+</html>

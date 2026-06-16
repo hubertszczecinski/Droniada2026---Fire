@@ -1,0 +1,111 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Wirtualne środowiska
+venv/
+.venv/
+.venv_yolo/
+env/
+.env/
+
+# Lastmile — klucze streamu / YouTube
+lastmile/config/stream.env
+
+# Dokumenty lokalne (nie na Jetson / nie w obrazie)
+Regulamin*.pdf
+*.pdf
+
+# Wagi YOLO w katalogu głównym (użyj runs/pose/.../weights/)
+/yolo*.pt
+
+# Narzędzia / IDE
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# System
+.DS_Store
+Thumbs.db
+
+# Blender
+*.blend1
+*.blend2
+
+# Wygenerowane raporty / metryki
+reports/
+
+# Wyniki pipeline_competition.py
+/dataset/results/
+
+# Debug / wizualizacje (regeneruj: pipelines.visualize_module_b)
+dataset/debug_*/
+dataset/debug_*.json
+dataset/debug_*.mp4
+dataset/debug_*.log
+!dataset/debug_cxy_latch/
+!dataset/debug_*/index.html
+!dataset/debug_*/summary.json
+
+# Podgląd alignment / live panel debug
+live_debug/
+live_debug_*/
+
+# Panel live + migawki sesji
+dataset/live_dashboard/session_*/
+
+# YOLO — miniatury treningu (zostaw weights/)
+runs/pose/*/train_batch*.jpg
+runs/pose/*/val_batch*.jpg
+runs/pose/*/*.png
+runs/pose/*/weights/
+
+# Kalibracja kamery (lokalna)
+config/camera_calibration.npz
+
+# Dataset (duże pliki; git add -f dla próbek)
+/dataset/images/
+/dataset/labels_yolo/
+/dataset/labels_pose/
+/dataset/labels_raport/
+
+# Lokalne nagrania i testowe wideo (nie wrzucaj do repo)
+/dataset/my_capture/
+/dataset/*.mov
+/dataset/*.mp4
+/dataset/**/*.mov
+/dataset/**/*.mp4
+/dataset/**/*.mkv
+
+# Cursor / lokalne
+.cursor/
+*.log
+
+# Archiwa (np. lokalny zip z datasetem)
+*.zip
+*.tar.gz

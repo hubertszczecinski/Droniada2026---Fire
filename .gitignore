@@ -1,103 +1,45 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Wirtualne środowiska
-venv/
+# Local dev / environments
+.DS_Store
+Thumbs.db
+.cursor/
+.vscode/
+.idea/
 .venv/
 .venv_yolo/
+venv/
 env/
 .env/
 
-# Lastmile — klucze streamu / YouTube
-lastmile/config/stream.env
-
-# Dokumenty lokalne (nie na Jetson / nie w obrazie)
-Regulamin*.pdf
-*.pdf
-
-# Wagi YOLO w katalogu głównym (użyj runs/pose/.../weights/)
-/yolo*.pt
-
-# Narzędzia / IDE
+# Logs / cache
+*.log
+logs/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
-.idea/
-.vscode/
-*.swp
-*.swo
 
-# System
-.DS_Store
-Thumbs.db
-
-# Blender
-*.blend1
-*.blend2
-
-# Wygenerowane raporty / metryki
-reports/
-
-# Wyniki pipeline_competition.py
-/dataset/results/
-
-# Debug / wizualizacje (regeneruj: pipelines.visualize_module_b)
-dataset/debug_*/
-dataset/debug_*.json
-dataset/debug_*.mp4
-dataset/debug_*.log
-!dataset/debug_cxy_latch/
-!dataset/debug_*/index.html
-!dataset/debug_*/summary.json
-
-# Podgląd alignment / live panel debug
-live_debug/
-live_debug_*/
-
-# Panel live + migawki sesji
-dataset/live_dashboard/session_*/
-
-# YOLO — miniatury treningu (zostaw weights/)
-runs/pose/*/train_batch*.jpg
-runs/pose/*/val_batch*.jpg
-runs/pose/*/*.png
-!runs/pose/*/weights/
-
-# Kalibracja kamery (lokalna)
-config/camera_calibration.npz
-
-# Dataset (duże pliki; git add -f dla próbek)
-/dataset/images/
-/dataset/labels_yolo/
-/dataset/labels_pose/
-/dataset/labels_raport/
-
-# Cursor / lokalne
-.cursor/
-*.log
-
-# Archiwa (np. lokalny zip z datasetem)
+# Archives
 *.zip
 *.tar.gz
+*.tgz
+
+# Heavy OGIEŃ data
+OGIE*/dataset/
+!OGIE*/dataset/live_dashboard/.gitkeep
+!OGIE*/dataset/results/.gitkeep
+OGIE*/live_debug/
+OGIE*/filmyNOWE/*
+!OGIE*/filmyNOWE/README.md
+OGIE*/runs/pose/*/weights/
+OGIE*/dataset/**/*.mov
+OGIE*/dataset/**/*.mp4
+OGIE*/dataset/**/*.mkv
+OGIE*/docs/*.mov
+OGIE*/docs/*.mp4
+
+# YOLO weight files (host externally)
+OGIE*/yolo*.pt
+
+# Keep root demo assets in git (docs/assets/demo.gif, demo.mp4)
+

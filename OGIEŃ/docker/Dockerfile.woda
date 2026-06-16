@@ -1,0 +1,35 @@
+# Lekki podgląd kamery + migawki woda (GStreamer MJPEG jak :8088).
+ARG L4T_ML_TAG=r36.4.0
+FROM dustynv/l4t-ml:${L4T_ML_TAG}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    WODA_HTTP_PORT=8087 \
+    WODA_OUTPUT_DIR=/migawka-woda \
+    WODA_WS_URL=ws://127.0.0.1:8765 \
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    v4l-utils \
+    libv4l-dev \
+    libglib2.0-0 \
+    libgstreamer1.0-0 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-tools \
+    python3-gi \
+    gir1.2-gstreamer-1.0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /ws
+
+COPY docker/requirements.woda.txt /tmp/requirements.woda.txt
+RUN rm -f /etc/pip.conf /root/.config/pip/pip.conf 2>/dev/null; \
+    pip3 install --no-cache-dir -r /tmp/requirements.woda.txt \
+    --index-url https://pypi.org/simple
+
+COPY docker/entrypoint.woda.sh /usr/local/bin/entrypoint-woda.sh
+RUN chmod +x /usr/local/bin/entrypoint-woda.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-woda.sh"]
+CMD ["woda-camera"]

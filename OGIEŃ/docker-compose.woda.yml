@@ -1,0 +1,47 @@
+# Podgląd kamery woda (:8087) + migawki po triggerze WebSocket (:8765).
+#
+#   export WS_ROOT_PATH=~/acoustics/droniada
+#   docker compose -f docker-compose.woda.yml up --build -d
+#
+# Podgląd:  http://<jetson-ip>:8087/
+# Zapis:    /migawka-woda/snapshot_*.jpg (root Jetsona)
+
+name: droniada-woda
+
+services:
+  woda_camera:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.woda
+      args:
+        L4T_ML_TAG: ${L4T_ML_TAG:-r36.4.0}
+    image: droniada-woda:latest
+    container_name: droniada_woda_camera
+    privileged: true
+    restart: unless-stopped
+    network_mode: host
+    devices:
+      - ${WODA_VIDEO_DEVICE:-/dev/video0}:/dev/video0
+    group_add:
+      - video
+    volumes:
+      - ${WS_ROOT_PATH:-.}:/ws
+      - /migawka-woda:/migawka-woda
+    environment:
+      - WODA_HTTP_PORT=8087
+      - WODA_HTTP_BIND=0.0.0.0
+      - WODA_CAMERA_DEVICE=/dev/video0
+      - WODA_OUTPUT_DIR=/migawka-woda
+      - WODA_WS_URL=${WODA_WS_URL:-ws://127.0.0.1:8765}
+      - WODA_SNAPSHOT_ON=${WODA_SNAPSHOT_ON:-hold_started,hold_stopped,snapshot,trigger,migawka}
+      - WODA_CAMERA_FOURCC=${WODA_CAMERA_FOURCC:-MJPG}
+      - WODA_CAMERA_WIDTH=${WODA_CAMERA_WIDTH:-1920}
+      - WODA_CAMERA_HEIGHT=${WODA_CAMERA_HEIGHT:-1080}
+      - WODA_CAMERA_FPS=${WODA_CAMERA_FPS:-30}
+      - WODA_CAMERA_BRIGHTNESS=${WODA_CAMERA_BRIGHTNESS:-60}
+      - WODA_CAMERA_WARMUP=${WODA_CAMERA_WARMUP:-15}
+      - WODA_ROTATE=${WODA_ROTATE:-180}
+      - WODA_JPEG_QUALITY=${WODA_JPEG_QUALITY:-85}
+      - WODA_STREAM_WIDTH=${WODA_STREAM_WIDTH:-960}
+      - OPENCV_VIDEOIO_PRIORITY_LIST=V4L2,GSTREAMER
+    command: woda-camera

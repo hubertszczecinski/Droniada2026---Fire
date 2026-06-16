@@ -1,0 +1,208 @@
+{
+  "schema": "droniada_card_colors_v1",
+  "created": "2026-06-10T12:17:20Z",
+  "source": "/Users/hubertszczecinski/STUDIA/Droniada/config/competition_cards",
+  "notes": "Kalibracja competition_cards 2026-06-10 (5 kart PNG; FIOLETOWA z poprzedniego profilu)",
+  "calibrated": true,
+  "source_files": {
+    "CZERWONA": "CZERWONA.png",
+    "ZIELONA": "ZIELONA.png",
+    "NIEBIESKA": "NIEBIESKA.png",
+    "ZOLTA": "ZOLTA.png",
+    "FIOLETOWA": "FIOLETOWA.png",
+    "POMARANCZOWA": "POMARANCZOWA.png"
+  },
+  "colors": {
+    "CZERWONA": {
+      "cls_id": 0,
+      "ranges": [
+        [
+          [
+            0,
+            49,
+            71
+          ],
+          [
+            13,
+            229,
+            255
+          ]
+        ],
+        [
+          [
+            168,
+            49,
+            71
+          ],
+          [
+            180,
+            229,
+            255
+          ]
+        ]
+      ],
+      "calibration_samples": [
+        {
+          "file": "CZERWONA.png",
+          "h": 3.0,
+          "s": 139.0,
+          "v": 237.0
+        }
+      ],
+      "median_hsv": {
+        "h": 3.0,
+        "s": 139.0,
+        "v": 237.0
+      }
+    },
+    "ZIELONA": {
+      "cls_id": 1,
+      "ranges": [
+        [
+          [
+            59,
+            20,
+            76
+          ],
+          [
+            115,
+            149,
+            255
+          ]
+        ]
+      ],
+      "calibration_samples": [
+        {
+          "file": "ZIELONA.png",
+          "h": 87.0,
+          "s": 59.0,
+          "v": 255.0
+        }
+      ],
+      "median_hsv": {
+        "h": 87.0,
+        "s": 59.0,
+        "v": 255.0
+      }
+    },
+    "NIEBIESKA": {
+      "cls_id": 2,
+      "ranges": [
+        [
+          [
+            68,
+            40,
+            76
+          ],
+          [
+            112,
+            220,
+            255
+          ]
+        ]
+      ],
+      "calibration_samples": [
+        {
+          "file": "NIEBIESKA.png",
+          "h": 90.0,
+          "s": 130.0,
+          "v": 253.0
+        }
+      ],
+      "median_hsv": {
+        "h": 90.0,
+        "s": 130.0,
+        "v": 253.0
+      }
+    },
+    "ZOLTA": {
+      "cls_id": 3,
+      "ranges": [
+        [
+          [
+            6,
+            58,
+            76
+          ],
+          [
+            48,
+            255,
+            255
+          ]
+        ]
+      ],
+      "calibration_samples": [
+        {
+          "file": "ZOLTA.png",
+          "h": 30.0,
+          "s": 165.0,
+          "v": 255.0
+        }
+      ],
+      "median_hsv": {
+        "h": 30.0,
+        "s": 165.0,
+        "v": 255.0
+      }
+    },
+    "FIOLETOWA": {
+      "cls_id": 4,
+      "ranges": [
+        [
+          [
+            97,
+            20,
+            45
+          ],
+          [
+            157,
+            170,
+            239
+          ]
+        ]
+      ]
+    },
+    "POMARANCZOWA": {
+      "cls_id": 5,
+      "ranges": [
+        [
+          [
+            0,
+            23,
+            76
+          ],
+          [
+            15,
+            203,
+            255
+          ]
+        ],
+        [
+          [
+            168,
+            23,
+            76
+          ],
+          [
+            180,
+            203,
+            255
+          ]
+        ]
+      ],
+      "calibration_samples": [
+        {
+          "file": "POMARANCZOWA.png",
+          "h": 14.0,
+          "s": 113.0,
+          "v": 255.0
+        }
+      ],
+      "median_hsv": {
+        "h": 14.0,
+        "s": 113.0,
+        "v": 255.0
+      }
+    }
+  }
+}

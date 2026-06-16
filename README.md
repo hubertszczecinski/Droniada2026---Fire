@@ -1,259 +1,65 @@
+# Droniada Challenge 2026 — OGIEŃ vision pipeline
 
-- Zależności: `pip install -r requirements.txt` (NumPy + OpenCV headless).
-- Opcjonalnie **Blender** z wbudowanym Pythonem do generowania syntetycznego datasetu.
+Vision stack for the **OGIEŃ** stage of [Droniada Challenge 2026](https://droniada.pl): live panel detection, YOLO-Pose corners, grid/colour reading (modules A & B), Jetson deployment, and a web dashboard for operators.
 
-## Dataset
+**Team:** SKN Robotycy × KINO
 
-Wszystkie skrypty zakładają względem `--dataset` (domyślnie `dataset/`) - wysłałem Piotr Tobie na Teams link do MEGA
+At the **Fire & Water** (*Ogień i Woda*) qualifier we were one of **two teams** that advanced to the OGIEŃ stage. We then **won the OGIEŃ competition** with this codebase — the same pipeline that runs locally on test footage and on the Jetson in the field.
 
-```
-dataset/
-├── images/           # img_0.png, img_1.png, …
-├── labels_yolo/      # img_N.txt — YOLO: class cx cy w h
-├── labels_raport/    # img_N.txt — linie GT raportu (tekst parsowany przez pipeline_competition)
-└── labels_pose/      # img_N.json — intrinsics, camera, panel, model_to_camera_opencv (GT z Blendera)
-```
+**Results:** [Droniada 2026 — wyniki i nagrody (PDF)](docs/assets/Droniada-2026-wyniki-nagrody.pdf)
 
-Katalog `reports/` może zawierać wyniki ewaluacji; `module_panel/data/` — np. kalibracja kąta (`angle_linear_rmat.json`).
+## Demo
 
-## Moduł pozycji — `module_pose`
+Live dashboard (`:8088`), YOLO-Pose corners, module B grid + card colours (screen capture, June 2026):
 
-**Wejście (API):**
+![OGIEŃ pipeline demo](docs/assets/demo.gif)
 
-- `pose_from_image(image_bgr, yolo_det=None, k=None, dist=None, …)` — obraz BGR, opcjonalnie lista detekcji YOLO `(cls, cx, cy, w, h)`, macierz kamery i dystorsja.
-- `pose_from_paths(image_path, yolo_path=None, pose_gt_json_path=None)` — ścieżki do plików; jeśli podasz JSON z `intrinsics`, użyje ich zamiast domyślnych.
+Source recording (local, gitignored): `OGIEŃ/docs/demo.mov`.  
+Regenerate GIF: `./scripts/make_readme_demo.sh OGIEŃ/docs/demo.mov`
 
-**Wyjście:** obiekt `PoseResult`; do JSON użyj `result.to_dict()`:
+## Repository layout
 
-- Zawsze: `ok`, `confidence`, `method`, `meta`.
-- Przy sukcesie m.in.: `rvec`, `tvec`, `corners_px`, kąty (`euler_cam_deg`, `roll_deg` / `pitch_deg` / `yaw_deg`, `panel_orientation_vs_drone`), odległość i wektor do środka panelu w układzie kamery (`distance_camera_to_panel_center_m`, `panel_center_in_camera_m`).
-- `meta` zawiera m.in. `reproj_mean_px`, informacje o wybranych narożnikach i kandydatach PnP.
+- **`OGIEŃ/`** — main vision project (YOLO-Pose, modules A/B, snapshots, web dashboard, autonomy integration).  
+  Details: [`OGIEŃ/README.md`](OGIEŃ/README.md) and [`OGIEŃ/docs/`](OGIEŃ/docs/).
+- **`OGIEŃ/Droniada_utils/`** — small Tkinter GUI for gimbal control over WebSocket (`gui.py`).
 
-Przy błędzie: `ok: false`, w `meta` np. `reason`: `no_corners`, `pnp_failed_all_candidates`, `no_image`.
+Training images, competition videos, YOLO weights, and live session dumps are **gitignored** — the repo is the code and docs, not the data bundle.
 
-## Moduł panelu — `module_panel`
-
-**Wejście (główna funkcja):**
-
-`analyze_panel_image(image_bgr, yolo_det, k, dist, xy_mode=..., angle_source=..., json_report_angle_deg=..., angle_calibration_path=...)`
-
-- Obraz BGR, detekcje YOLO (ta sama lista co w `pipeline_competition.load_yolo`), kalibracja kamery.
-- `xy_mode`: `grid_geom`, `grid_geom_white`, `warp_grid`, `geom_grid`, lub **`line_grid`** (v3: kandydaci `img_panel` / `black_panel` / warp-refine; wybór backendu XY: homografia z 4 rogów, linie na warp, lub RANSAC siatki — heurystyka bez GT).
-- `camera_calib_path`: opcjonalny NPZ z `pipelines.calibrate_camera` (`cv2.undistort` przed geometrią).
-- `angle_source`: skąd bierze się kąt raportu — m.in. `json` (z etykiety), `rmat_linear` / `rmat_theta` (z oszacowanej rotacji + opcjonalna kalibracja), `geom`, `pnp`.
-
-**Wyjście:** `PanelAnalyzeResult`:
-
-- `predictions` — lista `{'x': kolumna, 'y': wiersz, 'color': nazwa}` (komórki 1…10; kolor jak w `CLASS_TO_COLOR` w `pipeline_competition`).
-- `warped_bgr`, `homography` — prostokąt panelu i homografia (numpy, nie serializowane w `full_run` JSON).
-- `report_angle_deg`, `panel_angle_category`.
-- `meta`: m.in. `xy_mode`, `angle_source`, `reproj_mean_px`, `pnp_ok`, `corner_source`, `grid_xy_reliable`; przy braku narożników `err`: `no_corners`.
-
-Pełny przebieg na jednym obrazie — `pipelines.full_run`
-
-Uruchomienie z katalogu głównego repozytorium:
+## Quick start — vision (`OGIEŃ/`)
 
 ```bash
-python3 -m pipelines.full_run --image dataset/images/img_0.png
+cd OGIEŃ
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-- Domyślnie szuka `labels_yolo/<stem>.txt`; przy braku własnego `--pose-json` próbuje `labels_pose/<stem>.json` (poza trybem `--competition`).
-- `--competition` — kąt z `rmat_linear`, JSON pozy tylko jeśli podasz `--pose-json` (np. do intrinsics).
-
-Przykładowe flagi:
+Train or copy YOLO weights to `runs/pose/droniada_real_finetune/weights/best.pt` (see [`OGIEŃ/README.md`](OGIEŃ/README.md) — Blender export + two-stage training). For a quick live test, point at any panel recording:
 
 ```bash
-python3 -m pipelines.full_run --image dataset/images/img_0.png --competition
-python3 -m pipelines.full_run --image dataset/images/img_0.png --angle-source rmat_linear --xy-mode grid_geom_white
-python3 -m pipelines.full_run --image dataset/images/img_0.png --angle-calibration module_panel/data/angle_linear_rmat.json
+./scripts/run_local_video_test.sh /path/to/your_panel.mov
+# dashboard: http://127.0.0.1:8088/   operator: http://127.0.0.1:8089/
 ```
 
-**JSON na stdout** (skrót pól):
+Further reading:
 
-- `ok` — `true`, gdy moduł pozycji zwrócił narożniki (`pose.ok`) i obraz się wczytał; wtedy wywołano też analizę panelu. Szczegóły błędów modułu B są w `panel.analyze_meta` (np. `err`).
-- `pose` — słownik z `PoseResult.to_dict()`.
-- `predictions` — lista komórek/kolorów z modułu panelu.
-- `report_lines` — gotowe linie raportu (tekst).
-- `panel` — `id`, `report_angle_deg`, `panel_angle_category`, `analyze_meta`.
-- `flight_hints` — `module_a_reproj_mean_px`, `module_b_reproj_mean_px`, `module_b_grid_xy_reliable`, `trust_module_b_xy`.
+- [`OGIEŃ/README.md`](OGIEŃ/README.md) — modules A/B, dataset layout, CLI modes  
+- [`OGIEŃ/docs/INTEGRATION.md`](OGIEŃ/docs/INTEGRATION.md) — WebSocket + GStreamer integration  
+- [`OGIEŃ/docs/JETSON_DOCKER.md`](OGIEŃ/docs/JETSON_DOCKER.md) — Jetson Docker runtime  
+- [`OGIEŃ/docs/COMPETITION_REPORT.md`](OGIEŃ/docs/COMPETITION_REPORT.md) — competition report line format  
 
-## Inne skrypty (CLI)
-
-| Moduł | Komenda | Opis |
-|--------|---------|------|
-| Konkurs starych pipeline’ów | `python3 pipeline_competition.py --dataset ./dataset` | Benchmark wielu wariantów z `pipeline_competition`; wyniki w `reports/` (JSON/CSV/JSONL). |
-| Ewaluacja modułu B | `python3 -m pipelines.eval_module_b --dataset dataset` | Metryki kart / kolor / XY / kąt względem `labels_raport`. |
-| Ewaluacja frontal + reliable v2 | `python3 -m pipelines.eval_module_b --dataset dataset --orbit-steps frontal --reliable-only --out dataset/results/eval_frontal.json` | Orbit step 0, reproj≤8, homografia RANSAC≥12 inlierów. |
-| Porównanie trybów XY | `python3 -m pipelines.eval_module_b --orbit-steps frontal --reliable-only --compare-modes grid_geom_white,line_grid --out dataset/results/eval_frontal_line_grid_v3.json` | Na reliable v2: `line_grid` ~93% CXY vs `grid_geom_white` ~82% (frontal). |
-| Wizualizacja `line_grid` | `python3 -m pipelines.visualize_module_b --xy-mode line_grid --orbit-steps frontal --reliable-only --out-dir dataset/debug_line_grid_v3` | Galeria z `corner_source` i `xy_backend_selected`. |
-| **Live A + B (stanowisko)** | `./scripts/run_live_dashboard.sh` | Jeden panel: A+B, sidebar, migawki przy niskim reproj. Instrukcja: [`docs/LIVE_BENCH.md`](docs/LIVE_BENCH.md). |
-| **Live A + B (skrót)** | `./scripts/run_live_bench.sh` | To samo co dashboard (`--bench` = `--dashboard`). |
-| **Live moduł A (pose)** | `python3 -m release.run_live --mode pose --preview` | Dict integracyjny: odległość + kąty + ustawienie panelu. Zob. [`docs/MODULE_A.md`](docs/MODULE_A.md), `./scripts/verify_module_a_blender.sh`. |
-| **Live moduł B** | `python3 -m release.run_live_panel --video … --corner-mode yolo_pose --cxy-latch` | Migawka: [`docs/MODULE_B_SNAPSHOT.md`](docs/MODULE_B_SNAPSHOT.md). Weryfikacja: `./scripts/verify_module_b_snapshot.sh`. Zob. też `BASELINE.md`. |
-| **Czyszczenie artefaktów** | `./scripts/cleanup_artifacts.sh` | Usuwa `live_debug/`, stare galerie `debug_*`, nagrania testowe (~GB). Nie rusza obrazów treningowych ani wag YOLO. |
-| Kalibracja kamery | `python3 -m pipelines.calibrate_camera --images 'calibration_chess/*.jpg'` | Zapis `config/camera_calibration.npz` do undistort. |
-| Widoki przednie vs reszta | `python3 -m pipelines.eval_frontal_views --dataset dataset` | Metryki A (pose) i B (panel); opcja `--compare-non-frontal`. |
-| Błąd rotacji vs GT | `python3 -m pipelines.eval_pose_angular --dataset dataset` | Porównanie `model_to_camera_opencv` z estymatą. |
-| Kalibracja kąta raportu | `python3 -m pipelines.calibrate_report_angle --dataset dataset` | Zapis wagi do `module_panel/data/angle_linear_rmat.json` (ścieżka `--out`). |
-
-## Generowanie datasetu (Blender)
-
-Skrypt `generate_dataset_blender.py` jest pisany pod interpreter Blendera.
-
-**Domyślnie tylko ujęcia z przodu / lekko skośne** (bez tyłu panelu i bez czystego boku jak cienka kreska): azymuty  
-`-22,…,22`° (7 klatek / scena, jeśli przejdą filtry). Odrzucane są kadry z tyłu (biały znacznik za kamerą), zbyt cienki rzut panelu (&lt; 200 px) lub zbyt mały w kadrze. **Bez fallback** — zła klatka nie jest renderowana.
-
-Przykład — **pełna regeneracja** (usuwa stare `img_*`):
+## Quick start — gimbal GUI (`OGIEŃ/Droniada_utils/`)
 
 ```bash
-# macOS (Blender często nie jest w PATH):
-/Applications/Blender.app/Contents/MacOS/Blender --background --python generate_dataset_blender.py
-
-# albo skrypt (sam znajdzie Blender.app):
-DRONIADA_FRESH=1 ./scripts/regenerate_blender_frontal.sh
+cd OGIEŃ/Droniada_utils
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python gui.py
 ```
 
-Szybki test: `DRONIADA_QUICK_TEST=1` (5 scen, 3 azymuty: `0,30,-30`).
+Default WebSocket target: `ws://192.168.100.200:6100` (edit in `gui.py`).
 
-Zmienne (opcjonalnie):
+## License
 
-| Zmienna | Domyślnie | Znaczenie |
-|---------|-----------|-----------|
-| `DRONIADA_ORBIT_AZIMUTHS` | `-30,…,30` (9 wartości) | Lista kątów; `full` = stary orbit 360° |
-| `DRONIADA_MIN_FRONT_DOT` | `0.72` | Min. cos(kąta) do normalnej frontu (odrzuca tył/bok) |
-| `DRONIADA_MIN_PANEL_SPAN_PX` | `200` | Min. krótszy bok rzutu panelu w px |
-| `DRONIADA_MIN_PANEL_AREA_FRAC` | `0.06` | Min. ułamek pola kadru zajęty przez panel |
-| `DRONIADA_FRESH` | — | `1` = wyczyść `images/` i `labels_*` przed generacją |
-| `DRONIADA_PANEL_THICKNESS_M` | `0` | `0` = cienka płaszczyzna (bez jasnego boku); np. `0.002` = 2 mm |
-
-Eksport GT rogów → YOLO-Pose (projekcja z `labels_pose`):
-
-```bash
-python3 -m release.export_blender_yolo_pose --dataset dataset --out dataset/droniada_pose_blender
-```
-
-**Trening YOLO-Pose (Sim2Real, YOLO11n domyślnie):**
-
-```bash
-./scripts/train_yolo_two_stage.sh 0    # eksport Blender + panel_labels
-./scripts/train_yolo_two_stage.sh 1    # pretrain Blender → runs/pose/droniada_blender_pretrain/
-./scripts/train_yolo_two_stage.sh 2    # fine-tune real → runs/pose/droniada_real_finetune/
-# lub: ./scripts/train_yolo_two_stage.sh all
-
-export DRONIADA_YOLO_POSE_WEIGHTS="$(pwd)/runs/pose/droniada_real_finetune/weights/best.pt"
-```
-
-Na Jetsonie: `YOLO_MODEL=yolov8n-pose.pt ./scripts/train_yolo_two_stage.sh all`
-
-Wygenerowane pliki: `dataset/images/`, `labels_yolo/`, `labels_raport/`, `labels_pose/`.
-
-## Release (pętla główna)
-
-Osobne skrypty do integracji z lotem — prealokacja w `PoseRuntime` / `PanelRuntime`, pętla po klatkach z `dataset/images`:
-
-```bash
-python3 -m release.run_pose --dataset dataset
-python3 -m release.run_panel --dataset dataset --angle-source rmat_linear
-```
-
-`--max-frames N`, `--out plik.jsonl`. Kod eksperymentów: `pipelines/`, ewaluacje, `pipeline_competition.py`.
-
-### Test na żywo (kamera Mac)
-
-**Zamknij QuickTime** — Python musi sam otworzyć kamerę (`VideoCapture`). QuickTime i skrypt nie mogą dzielić tej samej kamery.
-
-```bash
-python3 -m release.run_live --mode both --interval-ms 500 --preview
-```
-
-Logi w terminalu; opcjonalnie `--log-file live.log`. `q` w oknie podglądu lub Ctrl+C. Bez live YOLO karty na panelu będą puste (kąt/pozycja z narożników obrazu).
-
-Nagranie z pliku (obrót tylko w skrypcie, oryginał `.mov` bez zmian):
-
-```bash
-python3 -m release.run_video --video Droniada_nag1.mov --rotate 180 --mode both --preview --interval-ms 500
-```
-
-**Tarot T10X-2A** (gimbal z nagrania `Droniad_nag2.mov`): profil intrinsics w `config/tarot_t10x_2a.json` — zoom 10×, ogniskowa **4.9–49 mm**, FOV **66.6°–7.2°**, 1080p ([spec](http://tarotrc.com/Product/Detail.aspx?Lang=en&Id=2e704832-d576-4baa-aba1-4706543034f8)). Przy `wide` dla 1920×1080: **fx≈1461** (zamiast domyślnego 1000).
-
-```bash
-# test modułu B na nagraniu (auto profil tarot wide)
-python3 -m release.run_live_panel --video Droniad_nag2.mov --no-loop --rotate 180 --no-color-detect --interval-ms 300 --max-frames 40
-
-# inny zoom optyczny (1=wide … 10=tele)
-python3 -m release.run_live_panel --video Droniad_nag2.mov --no-loop --camera-profile tarot_t10x_2a:mid
-python3 -m release.run_live_panel --video Droniad_nag2.mov --zoom-ratio 5
-```
-
-Narożniki: **`detect_corners_panel`** — najpierw czarna siatka (HSV/LAB), dopiero gdy to nie zadziała, ukryty zapas Canny (bez osobnych `canny_*` w logach).
-
-Podgląd narożników (ta sama detekcja co `run_live`):
-
-```bash
-python3 -m release.run_corner_tune --rotate 180 --preview --interval-ms 800
-```
-
-Na żywo z modułami:
-
-```bash
-python3 -m release.run_live --camera 1 --mode both --preview --interval-ms 1000
-```
-
-Domyślnie `--rotate 180` (Continuity). Podgląd: zielony = OK, żółty = słabe, czerwony „brak panelu”.
-
-Gotowy alignment live (rekomendowany stan na testy):
-
-```bash
-python3 -m release.run_alignment --camera 1 --preview --interval-ms 300
-```
-
-Domyślny pipeline to `hybrid`: bazuje głównie na kolorze panelu (`hsv`), traktuje siatkę jako walidację i przełącza się z profilu osiowego na kontur HSV, gdy panel jest widziany pod kątem. Domyślnie włączona jest stabilizacja czasowa (EMA + krótki hold po zgubieniu panelu). Dla sterowania można dodać kompaktowy output:
-
-```bash
-python3 -m release.run_alignment --camera 1 --preview --control-output --interval-ms 300
-```
-
-Porównanie bez stabilizacji:
-
-```bash
-python3 -m release.run_alignment --camera 1 --preview --no-stabilize --interval-ms 300
-```
-
-Zapis debug-klatek z overlayem:
-
-```bash
-python3 -m release.run_alignment --camera 1 --preview --save-dir reports/alignment_debug --save-every 15
-```
-
-Do porównań można odpalić wszystkie metody:
-
-```bash
-python3 -m release.run_alignment --camera 1 --pipeline all --preview --interval-ms 300
-```
-
-Metody do testów: `hybrid` i `hsv` są główne; `scored` jest zapasem; `grid` i `dark` są diagnostyczne.
-
-```bash
-python3 -m release.run_alignment --camera 1 --pipeline hsv --preview
-python3 -m release.run_alignment --camera 1 --pipeline hybrid --preview
-python3 -m release.run_alignment --video Droniada_nag1.mov --pipeline all --preview --no-loop
-```
-
-Strojenie wielu metod (offline): `run_corner_tune --probes full`.
-
-Benchmark metod na dataset (błąd kąta vs GT, 200 zdjęć):
-
-```bash
-python3 -m pipelines.eval_corner_methods --max-images 200 --out reports/corner_methods_benchmark.json
-```
-
-## Import w kodzie
-
-Katalog główny projektu musi być na `sys.path` (skrypty w `pipelines/` dodają go automatycznie). Z zewnątrz:
-
-```python
-import sys
-sys.path.insert(0, "/ścieżka/do/Droniada")
-from module_pose.api import pose_from_paths
-from module_panel.analyze import analyze_panel_image
-```
+GPL-3.0-or-later — see [`LICENSE`](LICENSE).
