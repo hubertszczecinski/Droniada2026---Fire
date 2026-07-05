@@ -14,9 +14,6 @@ Live dashboard (`:8088`), YOLO-Pose corners, module B grid + card colours (scree
 
 ![OGIEŃ pipeline demo](docs/assets/demo.gif)
 
-Source recording (local, gitignored): `OGIEŃ/docs/demo.mov`.  
-Regenerate GIF: `./scripts/make_readme_demo.sh OGIEŃ/docs/demo.mov`
-
 ## Repository layout
 
 - **`OGIEŃ/`** — main vision project (YOLO-Pose, modules A/B, snapshots, web dashboard, autonomy integration).  
@@ -62,4 +59,4 @@ Default WebSocket target: `ws://192.168.100.200:6100` (edit in `gui.py`).
 
 ## License
 
-GPL-3.0-or-later — see [`LICENSE`](LICENSE).
+GPL-3.0-or-later - see [`LICENSE`](LICENSE).
